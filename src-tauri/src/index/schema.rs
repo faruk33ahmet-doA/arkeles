@@ -22,7 +22,7 @@ use rusqlite::Connection;
 use crate::error::{CoreError, CoreResult};
 
 /// Anayasa madde 15.5. Bu sayı artınca index sıfırlanır ve yeniden kurulur.
-pub const SCHEMA_VERSION: i64 = 1;
+pub const SCHEMA_VERSION: i64 = 2;
 
 /// Şemayı uygular. Sürüm uyuşmazsa her şeyi silip yeniden kurar.
 pub fn apply(conn: &Connection) -> CoreResult<()> {
@@ -46,6 +46,7 @@ pub fn apply(conn: &Connection) -> CoreResult<()> {
 }
 
 const DROP_ALL: &str = r#"
+DROP TABLE IF EXISTS index_meta;
 DROP TABLE IF EXISTS notes_fts;
 DROP TABLE IF EXISTS tasks;
 DROP TABLE IF EXISTS links;
@@ -119,4 +120,14 @@ CREATE VIRTUAL TABLE notes_fts USING fts5(
     body,
     tokenize = 'unicode61 remove_diacritics 2'
 );
+
+-- ---------------------------------------------------------------------------
+-- index_meta — index'in kendi durumu. Anayasa madde 9.4: türetilmiş veri.
+-- Buradaki hiçbir satır BİLGİ taşımaz, yalnız taramanın ne zaman yapıldığını
+-- söyler. Silinse vault'tan yeniden kurulur.
+-- ---------------------------------------------------------------------------
+CREATE TABLE index_meta (
+    key   TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+) STRICT;
 "#;

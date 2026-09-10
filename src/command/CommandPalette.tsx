@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import {
   Command,
   CommandEmpty,
@@ -7,10 +7,17 @@ import {
   CommandItem,
   CommandList,
 } from "@/ui/primitives/command";
-import { Dialog, DialogContent, DialogOverlay, DialogPortal, DialogTitle } from "@/ui/primitives/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogOverlay,
+  DialogPortal,
+  DialogTitle,
+} from "@/ui/primitives/dialog";
 import { useCommandStore } from "@/state/commandStore";
 import { useZoom } from "@/navigation/zoom/useZoom";
 import { useHermesHealth } from "@/data/hooks/useHermesHealth";
+import { useSearch } from "@/data/hooks/useSearch";
 import { getActions, type Action, type ActionContext } from "./actionRegistry";
 import { cn } from "@/lib/cn";
 
@@ -18,12 +25,11 @@ import { cn } from "@/lib/cn";
  * Komut Paleti — Anayasa madde 27.
  *
  * 27.3  actionRegistry'yi okur. Kayıtta olmayan aksiyon yoktur.
- * 18.2  Hermes'in bildirmediği yetenek BURADA HİÇ GÖRÜNMEZ — filtre altta.
- * 30.1  Cam yüzey İZİNLİ (küçük, sınırlı yüzey). Dock ile birlikte
+ * 27.4  Not arama (FTS5) buradan yapılır — Sprint 1'de bağlandı.
+ * 18.2  Hermes'in bildirmediği yetenek BURADA HİÇ GÖRÜNMEZ.
+ * 30.1  Cam yüzey İZİNLİ (küçük, sınırlı yüzey) — dock ile birlikte
  *       ekrandaki en fazla 2 cam yüzeyin ikincisi (madde 30.3).
- * 30.2  Cam ASLA animate edilmez: Dialog içeriğine giriş/çıkış animasyonu
- *       verilmez. Ya vardır ya yoktur.
- * 23.2  Bu yüzden burada hiçbir motion bileşeni yok.
+ * 30.2  Cam ASLA animate edilmez → burada hiçbir motion bileşeni yok.
  */
 
 function groupActions(actions: Action[]): Map<string, Action[]> {
@@ -42,24 +48,41 @@ export function CommandPalette() {
   const { enterLayer } = useZoom();
   const { data: hermes } = useHermesHealth();
 
+  const [query, setQuery] = useState("");
+  const { data: hits } = useSearch(query);
+
   const ctx: ActionContext = useMemo(
-    () => ({ enterLayer, closePalette: () => setOpen(false) }),
+    () => ({
+      enterLayer,
+      closePalette: () => {
+        setOpen(false);
+        setQuery("");
+      },
+    }),
     [enterLayer, setOpen],
   );
 
-  // Anayasa madde 18.2 filtresi: yeteneği olmayan semantik aksiyon gizlenir.
+  // Madde 18.2 filtresi: yeteneği olmayan semantik aksiyon gizlenir.
   const visibleActions = useMemo(() => {
     return getActions().filter((action) => {
       if (action.kind !== "semantic") return true;
       if (!action.capability) return false;
-      return hermes?.reachable === true && hermes.capabilities.includes(action.capability);
+      return (
+        hermes?.reachable === true && hermes.capabilities.includes(action.capability)
+      );
     });
   }, [hermes]);
 
   const groups = useMemo(() => groupActions(visibleActions), [visibleActions]);
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog
+      open={open}
+      onOpenChange={(next) => {
+        setOpen(next);
+        if (!next) setQuery("");
+      }}
+    >
       <DialogPortal>
         {/* Overlay: sakin karartma, blur YOK (madde 30.1 — büyük yüzey) */}
         <DialogOverlay className="fixed inset-0 z-command bg-black/40" />
@@ -71,14 +94,17 @@ export function CommandPalette() {
             "outline-none",
           )}
         >
-          {/* Erişilebilirlik için zorunlu; görsel olarak gizli. */}
           <DialogTitle className="sr-only">Komut paleti</DialogTitle>
 
           <Command
-            // Kendi filtremizi değil cmdk'nın fuzzy eşleşmesini kullanıyoruz.
+            // cmdk'nın kendi filtresi aksiyonlar için; not sonuçları
+            // çekirdekten FTS5 ile GELDİĞİ İÇİN yeniden filtrelenmemeli.
+            shouldFilter={false}
             className="[&_[cmdk-input-wrapper]]:border-b [&_[cmdk-input-wrapper]]:border-border-subtle"
           >
             <CommandInput
+              value={query}
+              onValueChange={setQuery}
               placeholder="Ara veya git…"
               className={cn(
                 "w-full bg-transparent px-4 py-3 text-base text-text-primary",
@@ -86,37 +112,62 @@ export function CommandPalette() {
               )}
             />
             <CommandList className="max-h-[320px] overflow-y-auto p-2">
-              {/* Madde 26.2: soğuk "sonuç bulunamadı" değil. */}
               <CommandEmpty className="px-2 py-6 text-sm text-text-tertiary">
                 Eşleşen bir şey yok.
               </CommandEmpty>
 
-              {[...groups.entries()].map(([groupName, actions]) => (
-                <CommandGroup
-                  key={groupName}
-                  heading={groupName}
-                  className={cn(
-                    "[&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:py-2",
-                    "[&_[cmdk-group-heading]]:text-xs [&_[cmdk-group-heading]]:font-medium",
-                    "[&_[cmdk-group-heading]]:uppercase [&_[cmdk-group-heading]]:tracking-[0.08em]",
-                    "[&_[cmdk-group-heading]]:text-text-tertiary",
-                  )}
-                >
-                  {actions.map((action) => (
+              {/* Aksiyonlar — sorgu varsa isme göre süzülür. */}
+              {[...groups.entries()].map(([groupName, actions]) => {
+                const matching = filterActions(actions, query);
+                if (matching.length === 0) return null;
+                return (
+                  <CommandGroup
+                    key={groupName}
+                    heading={groupName}
+                    className={groupHeadingClass}
+                  >
+                    {matching.map((action) => (
+                      <CommandItem
+                        key={action.id}
+                        value={action.id}
+                        onSelect={() => action.run?.(ctx)}
+                        className={itemClass}
+                      >
+                        {action.title}
+                      </CommandItem>
+                    ))}
+                  </CommandGroup>
+                );
+              })}
+
+              {/*
+                Not sonuçları — madde 27.4.
+                SPRINT 1 KISITI: seçilince not AÇILMAZ, çünkü not görüntüleme
+                katmanı henüz yok. Madde 18.2 ("tıklandığında hata veren buton
+                yoktur") gereği sonuçlar `disabled` olarak listelenir: arama
+                çalıştığı görülür, yanıltıcı bir eylem sunulmaz.
+              */}
+              {hits && hits.length > 0 ? (
+                <CommandGroup heading="Notlar" className={groupHeadingClass}>
+                  {hits.map((hit) => (
                     <CommandItem
-                      key={action.id}
-                      value={`${action.title} ${action.keywords?.join(" ") ?? ""}`}
-                      onSelect={() => action.run?.(ctx)}
-                      className={cn(
-                        "cursor-default rounded-sm px-2 py-2 text-base text-text-secondary",
-                        "data-[selected=true]:bg-accent-muted data-[selected=true]:text-text-primary",
-                      )}
+                      key={hit.noteId}
+                      value={hit.noteId}
+                      disabled
+                      className={cn(itemClass, "cursor-default")}
                     >
-                      {action.title}
+                      <span className="flex min-w-0 flex-col gap-1">
+                        <span className="truncate text-text-primary">{hit.title}</span>
+                        {hit.snippet ? (
+                          <span className="truncate text-xs text-text-tertiary">
+                            {hit.snippet}
+                          </span>
+                        ) : null}
+                      </span>
                     </CommandItem>
                   ))}
                 </CommandGroup>
-              ))}
+              ) : null}
             </CommandList>
           </Command>
         </DialogContent>
@@ -124,3 +175,28 @@ export function CommandPalette() {
     </Dialog>
   );
 }
+
+/** Aksiyon süzme — başlık ve anahtar kelimelerde büyük/küçük harf duyarsız. */
+function filterActions(actions: Action[], query: string): Action[] {
+  const q = query.trim().toLocaleLowerCase("tr");
+  if (!q) return actions;
+  return actions.filter((action) => {
+    const haystack = [action.title, ...(action.keywords ?? [])]
+      .join(" ")
+      .toLocaleLowerCase("tr");
+    return haystack.includes(q);
+  });
+}
+
+const groupHeadingClass = cn(
+  "[&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:py-2",
+  "[&_[cmdk-group-heading]]:text-xs [&_[cmdk-group-heading]]:font-medium",
+  "[&_[cmdk-group-heading]]:uppercase [&_[cmdk-group-heading]]:tracking-[0.08em]",
+  "[&_[cmdk-group-heading]]:text-text-tertiary",
+);
+
+const itemClass = cn(
+  "cursor-default rounded-sm px-2 py-2 text-base text-text-secondary",
+  "data-[selected=true]:bg-accent-muted data-[selected=true]:text-text-primary",
+  "data-[disabled=true]:opacity-100",
+);

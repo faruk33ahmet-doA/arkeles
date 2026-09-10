@@ -76,8 +76,8 @@ export const LAYERS: Record<LayerId, LayerDefinition> = {
     id: "system",
     title: "Sistem",
     level: 1,
-    status: "placeholder",
-    component: () => import("@/modules/_placeholder/PlaceholderLayer"),
+    status: "live",
+    component: () => import("@/modules/system/SystemLayer"),
   },
 };
 

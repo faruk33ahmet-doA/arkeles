@@ -4,9 +4,8 @@
 Anayasa madde 19.5: "Vault içeriği hiçbir log satırına yazılmaz.
 Log'da yalnızca ID ve dosya yolu bulunur."
 
-Bu yüzden hata varyantları NOT İÇERİĞİ TAŞIMAZ. Bir parse hatasında
-hangi dosyanın hangi satırında sorun olduğu söylenir, o satırın metni
-söylenmez. Sağlık ve Finans verisi hassastır.
+Bu yüzden hata varyantları NOT İÇERİĞİ TAŞIMAZ. Sağlık ve Finans verisi
+hassastır; bir parse hatasının mesajı o satırın metnini asla göstermez.
 */
 
 use serde::Serialize;
@@ -27,6 +26,9 @@ pub enum CoreError {
 
     #[error("vault yapılandırılmadı")]
     VaultNotConfigured,
+
+    #[error("seçilen klasör okunamıyor")]
+    VaultUnreadable,
 }
 
 pub type CoreResult<T> = Result<T, CoreError>;

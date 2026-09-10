@@ -1,21 +1,20 @@
 import { useQuery } from "@tanstack/react-query";
-import { TODAY_FIXTURE, type TodayView } from "@/modules/today/fixtures";
+import { getToday } from "@/services/vault.service";
 import { queryKeys } from "@/data/queryKeys";
 
 /*
- * Bugün görünümü — Anayasa madde 36.2 ("live" modül).
+ * Bugün görünümü — GERÇEK VERİ (Sprint 1).
  *
- * SPRINT 0: sahte veri (fixture). Sprint 0 teslim kriteri "henüz gerçek veri
- * olmayacak" der; fixture bilinçli ve geçicidir.
+ * Fixture kaldırıldı. Veri Rust çekirdeğindeki SQLite index'ten gelir
+ * (madde 15.2), bütçe < 10 ms (madde 34.1).
  *
- * SPRINT 1: queryFn → vault.service.listToday() olacak, index üzerinden
- * (madde 15.2), bütçe < 10 ms (madde 34.1). Bileşenler DEĞİŞMEYECEK —
- * bu yüzden fixture bugünden gerçek şemayla aynı şekli taşıyor.
+ * Tazeleme dosya izleyiciden gelir (madde 20.4 → `vault:changed`), yoklamayla
+ * değil — madde 35.1: gereksiz iş yapmayız.
  */
 export function useToday() {
-  return useQuery<TodayView>({
+  return useQuery({
     queryKey: queryKeys.today.view,
-    queryFn: async () => TODAY_FIXTURE,
+    queryFn: getToday,
     retry: false,
   });
 }

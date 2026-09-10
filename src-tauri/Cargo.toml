@@ -16,8 +16,22 @@ tauri-build = { version = "2", features = [] }
 
 [dependencies]
 tauri = { version = "2", features = ["macos-private-api"] }
+tauri-plugin-dialog = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+
+# Frontmatter (YAML) ayrıştırma. Anayasa madde 14.1: tek amaçlı, dar bağımlılık.
+serde_yaml = "0.9"
+
+# Dosya izleyici — madde 20.4 (200 ms debounce üstte kurulur).
+notify = "7"
+
+# İçerik hash'i — madde 15.6: hash aynıysa yeniden indeksleme yapılmaz.
+# Tauri ağacında zaten derleniyor, ek maliyet yok.
+sha2 = "0.10"
+
+# Rust → TypeScript tip üretimi. Madde 14.2: elle yazılmış IPC tipi YASAK.
+ts-rs = "10"
 
 # Anayasa madde 15: SQLite index. `bundled` → sistem SQLite'ına bağımlı
 # olmayız, sürüm sürprizi yaşamayız (madde 13: tamamen lokal, öngörülebilir).

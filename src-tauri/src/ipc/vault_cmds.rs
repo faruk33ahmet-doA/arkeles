@@ -1,49 +1,71 @@
 /*!
 Vault IPC komutları — Anayasa madde 12, 15.1, 17.3.
 
-Madde 15.1: arayüz markdown taramaz. Bu yüzden burada "dosya oku" gibi
-bir komut YOKTUR — yalnız index'ten türetilmiş özetler döner.
+Madde 15.1: arayüz markdown taramaz. Burada "dosya oku" komutu YOKTUR —
+yalnız index'ten türetilmiş görünümler döner.
 */
 
-use serde::Serialize;
+use std::path::PathBuf;
+
 use tauri::State;
 
-use crate::vault::reader;
+use crate::error::CoreResult;
+use crate::types::{DashboardView, SearchHit, TodayView, VaultStatus};
 use crate::AppState;
 
-/// Anayasa madde 17.3: vault yolu yapılandırılmamış olabilir → `path: None`.
-///
-/// `camelCase` çünkü tüketici TypeScript. Sprint 1'de bu tip `ts-rs` ile
-/// üretilecek ve elle hizalama bitecek (madde 14.2).
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct VaultStatus {
-    pub path: Option<String>,
-    /// Anayasa madde 9.4 & 11.5: index'ten SAYIM. Analiz değil.
-    pub note_count: u64,
-    pub indexed_at: Option<String>,
-}
-
-/// Vault durumu.
-///
-/// Yapılandırılmamış veya erişilemez vault HATA DEĞİLDİR (madde 18.3
-/// mantığı): arayüz bunu "Vault yapılandırılmadı" diye sakin gösterir.
+/// Vault durumu. Yapılandırılmamış vault HATA DEĞİLDİR (madde 18.3 mantığı).
 #[tauri::command]
 pub fn vault_status(state: State<'_, AppState>) -> VaultStatus {
     let path = state
         .config
-        .vault_path
-        .as_ref()
-        .filter(|p| reader::is_readable(p))
+        .vault_path()
+        .filter(|p| crate::vault::reader::is_readable(p))
         .map(|p| p.to_string_lossy().into_owned());
 
-    // Sayım başarısız olursa 0 döner — index henüz kurulmamış olabilir.
-    let note_count = state.index.note_count().unwrap_or(0);
+    state.index.vault_status(path)
+}
 
-    VaultStatus {
-        path,
-        note_count,
-        // Sprint 1: index oluşturucu son tarama zamanını yazacak.
-        indexed_at: None,
-    }
+/// Vault'u seçer: yapılandırmaya yazar, index'i sıfırlar, tam tarama yapar,
+/// izleyiciyi yeniden kurar. Anayasa madde 17.3.
+///
+/// Yol geçersizse hata döner — bu, kullanıcının BİLİNÇLİ bir eyleminin
+/// başarısız olmasıdır, arka plan arızası değil; sessiz kalmak yanlış olur.
+#[tauri::command]
+pub async fn select_vault(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    path: String,
+) -> CoreResult<VaultStatus> {
+    let root = PathBuf::from(&path);
+
+    state.config.set_vault_path(&root)?;
+
+    // Madde 9.3: index türetilmiş veridir, sıfırlamak kayıpsızdır.
+    state.index.clear()?;
+
+    let report = state.index.full_scan(&root)?;
+    state.index.record_scan_ms(report.duration_ms);
+
+    // Eski izleyiciyi düşür, yenisini kur (madde 20.4).
+    state.restart_watcher(&app, &root);
+
+    Ok(state.index.vault_status(Some(path)))
+}
+
+/// Bugün görünümü — Anayasa madde 36.2. Bütçe: < 10 ms (madde 34.1).
+#[tauri::command]
+pub fn list_today(state: State<'_, AppState>) -> CoreResult<TodayView> {
+    state.index.today()
+}
+
+/// Panel görünümü — Anayasa madde 24.2.
+#[tauri::command]
+pub fn dashboard_view(state: State<'_, AppState>) -> CoreResult<DashboardView> {
+    state.index.dashboard()
+}
+
+/// Not arama — Anayasa madde 27.4 (Cmd+K içinden).
+#[tauri::command]
+pub fn search_notes(state: State<'_, AppState>, query: String) -> CoreResult<Vec<SearchHit>> {
+    state.index.search(&query, 20)
 }

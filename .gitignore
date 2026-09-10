@@ -16,3 +16,6 @@ src-tauri/target/
 .idea/
 # arkeles local runtime data (never committed — türetilmiş veri, madde 15.3)
 /.arkeles-dev/
+
+# ts-rs üretimi tipler — kaynak Rust'ta, burada değil (madde 14.2).
+# Yeniden üretmek için: pnpm types

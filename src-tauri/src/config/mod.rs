@@ -4,12 +4,10 @@ Uygulama yapılandırması — Anayasa madde 17.
 17.1  Pencere konumu, son katman, dock sırası, tema, index → VAULT'A YAZILMAZ.
 17.2  Bunlar uygulama yapılandırmasıdır, bilgi değildir. app-config dizinine gider.
 17.3  Vault yolu HİÇBİR YERDE SABİT KODLANMAZ. İlk açılışta sorulur.
-
-Sprint 0: yapılandırma okunur/oluşturulur ama vault yolu boştur.
-          "İlk açılışta sor" akışı Sprint 1'de gelir.
 */
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
+use std::sync::RwLock;
 
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Manager};
@@ -18,24 +16,35 @@ use crate::error::{CoreError, CoreResult};
 
 /// Diskte tutulan yapılandırma. Anayasa madde 17.2.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct Config {
+pub struct ConfigData {
     /// Anayasa madde 17.3: sabit kodlanamaz. Yapılandırılmadıysa `None`.
     #[serde(default)]
     pub vault_path: Option<PathBuf>,
 }
 
+/// Yapılandırmanın canlı hali. Vault değiştiğinde yazılabilir olmalı,
+/// bu yüzden RwLock: okuma çok, yazma nadir.
+pub struct Config {
+    data: RwLock<ConfigData>,
+    file: PathBuf,
+}
+
 impl Config {
     /// Yapılandırmayı app-config dizininden okur; yoksa varsayılanı döner.
-    ///
     /// Eksik dosya bir HATA DEĞİLDİR — ilk açılışta normaldir.
     pub fn load(app: &AppHandle) -> CoreResult<Self> {
-        let path = Self::file_path(app)?;
+        let file = Self::file_path(app)?;
 
-        match std::fs::read_to_string(&path) {
-            Ok(raw) => Ok(serde_json::from_str(&raw).unwrap_or_default()),
-            Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(Self::default()),
-            Err(err) => Err(CoreError::Config(err)),
-        }
+        let data = match std::fs::read_to_string(&file) {
+            Ok(raw) => serde_json::from_str(&raw).unwrap_or_default(),
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => ConfigData::default(),
+            Err(err) => return Err(CoreError::Config(err)),
+        };
+
+        Ok(Self {
+            data: RwLock::new(data),
+            file,
+        })
     }
 
     fn file_path(app: &AppHandle) -> CoreResult<PathBuf> {
@@ -46,10 +55,45 @@ impl Config {
         Ok(dir.join("config.json"))
     }
 
-    /// Vault yolu — yapılandırılmadıysa açık hata.
-    /// Anayasa madde 18.3: yapılandırılmamış olmak çökme sebebi değildir,
-    /// arayüz bunu sakin bir durum olarak gösterir.
-    pub fn require_vault_path(&self) -> CoreResult<&PathBuf> {
-        self.vault_path.as_ref().ok_or(CoreError::VaultNotConfigured)
+    fn read(&self) -> std::sync::RwLockReadGuard<'_, ConfigData> {
+        self.data.read().unwrap_or_else(|p| p.into_inner())
+    }
+
+    /// Yapılandırılmış vault yolu. Madde 17.3: `None` geçerli bir durumdur.
+    pub fn vault_path(&self) -> Option<PathBuf> {
+        self.read().vault_path.clone()
+    }
+
+    /// Vault yolunu değiştirir ve diske yazar.
+    ///
+    /// Yol okunabilir bir dizin değilse REDDEDİLİR — yapılandırmayı bozmayız.
+    pub fn set_vault_path(&self, path: &Path) -> CoreResult<()> {
+        if !crate::vault::reader::is_readable(path) {
+            return Err(CoreError::VaultUnreadable);
+        }
+
+        {
+            let mut data = self.data.write().unwrap_or_else(|p| p.into_inner());
+            data.vault_path = Some(path.to_path_buf());
+        }
+
+        self.persist()
+    }
+
+    fn persist(&self) -> CoreResult<()> {
+        if let Some(parent) = self.file.parent() {
+            std::fs::create_dir_all(parent).map_err(CoreError::Config)?;
+        }
+
+        let json = serde_json::to_string_pretty(&*self.read())
+            .map_err(|e| CoreError::Config(std::io::Error::other(e)))?;
+
+        // Madde 20.1 ile aynı disiplin: geçici dosya + rename.
+        // Yapılandırma vault değil ama yarım yazılmış config de kabul edilemez.
+        let tmp = self.file.with_extension("json.tmp");
+        std::fs::write(&tmp, json).map_err(CoreError::Config)?;
+        std::fs::rename(&tmp, &self.file).map_err(CoreError::Config)?;
+
+        Ok(())
     }
 }

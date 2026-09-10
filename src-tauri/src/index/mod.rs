@@ -2,15 +2,19 @@
 Index katmanı — Anayasa madde 9, 15.
 
 Bu modül TÜRETİLMİŞ VERİ tutar. Kaynak Obsidian'dır (madde 7.2).
-Vault → index akışı TEK YÖNLÜDÜR (madde 15.4): index'ten vault'a asla
-veri akmaz.
+Vault → index akışı TEK YÖNLÜDÜR (madde 15.4).
 
-Sprint 0: şema + bağlantı hazır, tablolar boş.
-Sprint 1: `builder` modülü eklenecek — tam tarama ve artımlı güncelleme.
+Silme testi (madde 9.3): index dosyasını silince hiçbir BİLGİ kaybolmaz —
+yalnız hız kaybolur, o da vault'tan yeniden taranarak geri gelir.
 */
 
+mod builder;
 mod db;
+mod query;
 mod schema;
 
+#[cfg(test)]
+mod query_test;
+
+pub use builder::ScanReport;
 pub use db::IndexHandle;
-pub use schema::SCHEMA_VERSION;

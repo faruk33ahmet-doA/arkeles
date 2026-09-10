@@ -1,32 +1,50 @@
-import { ipc } from "./ipc";
+import { ipc, ipcStrict } from "./ipc";
+import type { DashboardView, SearchHit, TodayView, VaultStatus } from "@/lib/generated";
 
 /*
  * Vault Service — Anayasa madde 7.2, 15.1, 17.3.
  *
  * Madde 15.1: Markdown dosyaları arayüz tarafından DOĞRUDAN TARANMAZ.
- * Bütün okuma Rust çekirdeğindeki index üzerinden yapılır. Bu servisin
- * hiçbir fonksiyonu dosya yolu almaz, dosya okumaz, markdown ayrıştırmaz.
+ * Bu servisin hiçbir fonksiyonu dosya yolu almaz, dosya okumaz,
+ * markdown ayrıştırmaz — hepsi index üzerinden geçer.
  *
- * Sprint 0: yalnız durum sorgusu (vault bağlanmadı — teslim kriteri).
- * Sprint 1: list_today, list_notes, get_note, search buraya eklenir.
+ * Tipler `ts-rs` ile üretilir (madde 14.2). Elle tip tanımı YOK.
  */
 
-// GEÇİCİ: ts-rs Sprint 1 (madde 14.2)
-export interface VaultStatus {
-  /** Yapılandırılmış vault yolu. Madde 17.3: sabit kodlanamaz, null olabilir. */
-  path: string | null;
-  /** Index'lenmiş not sayısı. Madde 9.4: türetilmiş veri. */
-  noteCount: number;
-  /** Son index zamanı (ISO 8601). Hiç index'lenmediyse null. */
-  indexedAt: string | null;
-}
-
-const UNCONFIGURED: VaultStatus = {
-  path: null,
-  noteCount: 0,
-  indexedAt: null,
+const UNCONFIGURED: VaultStatus = { path: null, noteCount: 0, indexedAt: null };
+const EMPTY_TODAY: TodayView = { overdue: [], due: [], touchedNotes: [] };
+const EMPTY_DASHBOARD: DashboardView = {
+  lifeScore: null,
+  workspaces: [],
+  criticalTasks: [],
 };
 
 export async function getVaultStatus(): Promise<VaultStatus> {
   return ipc<VaultStatus>("vault_status", UNCONFIGURED);
+}
+
+/**
+ * Vault'u seçer. Anayasa madde 17.3.
+ *
+ * `ipcStrict`: kullanıcının bilinçli eylemi, sessizce başarısız olamaz.
+ * Çekirdek yolu doğrular; okunamayan klasör reddedilir.
+ */
+export async function selectVault(path: string): Promise<VaultStatus> {
+  return ipcStrict<VaultStatus>("select_vault", { path });
+}
+
+/** Anayasa madde 36.2 — bütçe < 10 ms (madde 34.1). */
+export async function getToday(): Promise<TodayView> {
+  return ipc<TodayView>("list_today", EMPTY_TODAY);
+}
+
+/** Anayasa madde 24.2. */
+export async function getDashboard(): Promise<DashboardView> {
+  return ipc<DashboardView>("dashboard_view", EMPTY_DASHBOARD);
+}
+
+/** Anayasa madde 27.4 — Cmd+K içinden not arama. */
+export async function searchNotes(query: string): Promise<SearchHit[]> {
+  if (query.trim().length < 2) return [];
+  return ipc<SearchHit[]>("search_notes", [], { query });
 }
