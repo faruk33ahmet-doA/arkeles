@@ -1,0 +1,153 @@
+/*
+ * ARKELÉS — Design Token Sistemi
+ * Anayasa madde 29. Bu dosya UI kodundan önce sabitlenmiştir; artık tartışılmaz.
+ * Kod içinde token dışında sabit değer (magic number) kullanımı kod incelemesinde ret sebebidir (madde 29.3).
+ *
+ * Katman düzeni:
+ *   :root            → tema-bağımsız ölçekler (uzay, radius, tipografi, süre, easing, z-index, blur)
+ *   :root            → karanlık tema renkleri (VARSAYILAN — madde 29.2)
+ *   [data-theme=light]→ aydınlık tema renk override'ları
+ */
+
+:root {
+  /* ---- Uzay ölçeği (madde 29) — 4 tabanlı, sınırlı set ---- */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+  --space-16: 64px;
+
+  /* ---- Radius (madde 29) — üç değer ---- */
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 16px;
+
+  /* ---- Tipografi rampası (madde 29) — SF Pro / system-ui, tek aile (madde 32) ---- */
+  --font-family: -apple-system, "SF Pro Text", system-ui, sans-serif;
+  --text-xs: 11px;
+  --text-sm: 13px;
+  --text-base: 15px;
+  --text-lg: 20px;
+  --text-xl: 28px;
+  --text-2xl: 40px;
+
+  --leading-tight: 1.2;
+  --leading-normal: 1.5;
+
+  --weight-regular: 400;
+  --weight-medium: 500;
+  --weight-semibold: 600;
+
+  /* ---- Hareket (madde 23, 29) ---- */
+  --dur-fast: 120ms;   /* mikro tepki: hover, focus */
+  --dur-base: 200ms;   /* panel geçişi, açılır yüzey */
+  --dur-layer: 260ms;  /* katman zoom geçişi — üst sınır 300ms (madde 23.4) */
+  --ease-out: cubic-bezier(0.32, 0.72, 0, 1);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+
+  /* ---- z-index skalası — sıçrama yok, isimli katmanlar ---- */
+  --z-base: 0;
+  --z-layer: 10;       /* modül katmanları */
+  --z-panel: 20;       /* alt panel geçişleri */
+  --z-trail: 30;       /* Zoom Trail breadcrumb */
+  --z-dock: 40;        /* Bottom Dock */
+  --z-command: 50;     /* Cmd+K komut paleti */
+  --z-conflict: 60;    /* yalnız veri kaybı riski bu seviyeyi kullanır (madde 25.4) */
+
+  /* ---- Blur / cam efekti (madde 30) ---- */
+  /* Cam yalnız küçük yüzeylerde, asla animate edilmeden (madde 30.1, 30.2). */
+  --blur-glass: 20px;
+  --blur-glass-strong: 32px;
+
+  /* ---- Elevation — 3 seviye, hepsi nötr, renkli gölge YOK (madde 29, madde 32) ---- */
+  --elevation-1: 0 1px 2px rgba(0, 0, 0, 0.18), 0 1px 1px rgba(0, 0, 0, 0.12);
+  --elevation-2: 0 4px 12px rgba(0, 0, 0, 0.22), 0 2px 4px rgba(0, 0, 0, 0.14);
+  --elevation-3: 0 12px 32px rgba(0, 0, 0, 0.28), 0 4px 8px rgba(0, 0, 0, 0.16);
+}
+
+/* ======================================================================
+ * KARANLIK TEMA — VARSAYILAN (madde 29.2)
+ * Nötr gri ölçek + TEK vurgu rengi. Gradyan/neon/glow yok (madde 32).
+ * ==================================================================== */
+:root,
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  /* Yüzey basamakları — derinlik renkle değil, aydınlık farkıyla kurulur (madde 28.2) */
+  --surface-0: #0b0b0d;   /* uygulama zemini */
+  --surface-1: #141416;   /* katman zemini */
+  --surface-2: #1c1c1f;   /* kart */
+  --surface-3: #26262a;   /* yükseltilmiş kart / hover */
+
+  --glass-bg: rgba(20, 20, 22, 0.72);
+  --glass-border: rgba(255, 255, 255, 0.08);
+
+  /* Metin */
+  --text-primary: rgba(255, 255, 255, 0.92);
+  --text-secondary: rgba(255, 255, 255, 0.60);
+  --text-tertiary: rgba(255, 255, 255, 0.38);
+  --text-on-accent: #0b0b0d;
+
+  /* Kenarlık / ayırıcı */
+  --border-subtle: rgba(255, 255, 255, 0.06);
+  --border-default: rgba(255, 255, 255, 0.10);
+  --border-strong: rgba(255, 255, 255, 0.16);
+
+  /* Tek vurgu rengi — sakin, soğuk beyaz-mavi. Neon değil. */
+  --accent: #e8eaed;
+  --accent-muted: rgba(232, 234, 237, 0.14);
+
+  /* Durum göstergeleri — yalnız Hermes/index durumu için (madde 18.3) */
+  --status-online: #7fb383;   /* sönük yeşil */
+  --status-offline: rgba(255, 255, 255, 0.28);  /* gri — hata değil (madde 18.4) */
+  --status-attention: #c8a45c; /* sönük amber — yalnız veri kaybı riski (madde 25.4) */
+}
+
+/* ======================================================================
+ * AYDINLIK TEMA — token seviyesinde destekli (madde 29.2)
+ * ==================================================================== */
+:root[data-theme="light"] {
+  color-scheme: light;
+
+  --surface-0: #f5f5f4;
+  --surface-1: #fbfbfa;
+  --surface-2: #ffffff;
+  --surface-3: #f0f0ef;
+
+  --glass-bg: rgba(251, 251, 250, 0.72);
+  --glass-border: rgba(0, 0, 0, 0.06);
+
+  --text-primary: rgba(0, 0, 0, 0.88);
+  --text-secondary: rgba(0, 0, 0, 0.56);
+  --text-tertiary: rgba(0, 0, 0, 0.36);
+  --text-on-accent: #ffffff;
+
+  --border-subtle: rgba(0, 0, 0, 0.05);
+  --border-default: rgba(0, 0, 0, 0.09);
+  --border-strong: rgba(0, 0, 0, 0.14);
+
+  --accent: #1a1a1c;
+  --accent-muted: rgba(26, 26, 28, 0.08);
+
+  --status-online: #5c8a60;
+  --status-offline: rgba(0, 0, 0, 0.24);
+  --status-attention: #a37d3c;
+
+  --elevation-1: 0 1px 2px rgba(0, 0, 0, 0.08), 0 1px 1px rgba(0, 0, 0, 0.04);
+  --elevation-2: 0 4px 12px rgba(0, 0, 0, 0.10), 0 2px 4px rgba(0, 0, 0, 0.06);
+  --elevation-3: 0 12px 32px rgba(0, 0, 0, 0.14), 0 4px 8px rgba(0, 0, 0, 0.08);
+}
+
+/* ======================================================================
+ * prefers-reduced-motion — madde 23.8: süre 0, uygulama tam çalışır
+ * ==================================================================== */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --dur-fast: 0ms;
+    --dur-base: 0ms;
+    --dur-layer: 0ms;
+  }
+}

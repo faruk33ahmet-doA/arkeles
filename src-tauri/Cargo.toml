@@ -1,0 +1,36 @@
+[package]
+name = "arkeles"
+version = "0.0.0"
+description = "ARKELÉS — kişisel işletim sistemi"
+edition = "2021"
+rust-version = "1.77"
+publish = false
+
+[lib]
+# Tauri 2 mobil hedefleri için kütüphane adı ayrı tutulur.
+name = "arkeles_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["macos-private-api"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# Anayasa madde 15: SQLite index. `bundled` → sistem SQLite'ına bağımlı
+# olmayız, sürüm sürprizi yaşamayız (madde 13: tamamen lokal, öngörülebilir).
+rusqlite = { version = "0.32", features = ["bundled"] }
+
+# Hata tipleri. Anayasa madde 14.1 gereği minimum bağımlılık:
+# anyhow yerine thiserror — kütüphane katmanında tipli hata doğru olan.
+thiserror = "2"
+
+[profile.release]
+# Anayasa madde 34.1: boşta RAM < 180 MB, ikili küçük olmalı.
+panic = "abort"
+codegen-units = 1
+lto = true
+opt-level = "s"
+strip = true

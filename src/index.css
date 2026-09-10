@@ -1,0 +1,71 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+ * Temel katman — Anayasa madde 35.5: "Native his korunur.
+ * Uygulama bir web sitesi gibi davranmaz."
+ */
+@layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    margin: 0;
+    background: var(--surface-0);
+    color: var(--text-primary);
+    font-family: var(--font-family);
+    font-size: var(--text-base);
+    line-height: var(--leading-normal);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+
+    /* Native his: metin seçimi kontrollü (madde 35.5).
+       Seçilebilirlik gereken yerlerde `select-text` ile açılır. */
+    user-select: none;
+    -webkit-user-select: none;
+
+    /* Tarayıcı kaydırma davranışı taşmaz (madde 35.5). */
+    overscroll-behavior: none;
+  }
+
+  /* Not içerikleri ve okunabilir metin seçilebilir olmalı. */
+  p,
+  li,
+  h1,
+  h2,
+  h3,
+  code,
+  pre {
+    user-select: text;
+    -webkit-user-select: text;
+  }
+
+  /* Focus görünürlüğü klavye kullanıcısı için korunur (madde 27.5),
+     fare kullanıcısında gürültü yapmaz. */
+  :focus:not(:focus-visible) {
+    outline: none;
+  }
+
+  /* Kaydırma çubuğu sessiz (madde 5). */
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: var(--border-default);
+    border-radius: var(--radius-sm);
+    border: 3px solid transparent;
+    background-clip: content-box;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--border-strong);
+    background-clip: content-box;
+  }
+}

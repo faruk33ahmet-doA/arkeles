@@ -1,0 +1,7 @@
+# pnpm 10+ ayarlarının evi.
+#
+# esbuild (vite'ın bağımlılığı) kurulum sonrası kendi platform ikilisini
+# yerleştirir. Bu bir araç zinciri gereksinimidir; anayasa madde 14.1
+# çalışma zamanı bağımlılıklarını sınırlar, build aracı kapsam dışıdır.
+allowBuilds:
+  esbuild: true
