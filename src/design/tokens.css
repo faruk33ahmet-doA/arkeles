@@ -52,6 +52,7 @@
   --z-base: 0;
   --z-layer: 10;       /* modül katmanları */
   --z-panel: 20;       /* alt panel geçişleri */
+  --z-drag: 25;        /* pencere sürükleme şeridi (madde 35.5) */
   --z-trail: 30;       /* Zoom Trail breadcrumb */
   --z-dock: 40;        /* Bottom Dock */
   --z-command: 50;     /* Cmd+K komut paleti */

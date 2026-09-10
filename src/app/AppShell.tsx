@@ -4,6 +4,7 @@ import { ZoomTrail } from "@/navigation/trail/ZoomTrail";
 import { CommandPalette } from "@/command/CommandPalette";
 import { useCommandPaletteHotkey } from "@/command/useCommandPalette";
 import { useGlobalKeybindings } from "./keybindings";
+import { WindowDragRegion } from "./WindowDragRegion";
 
 /*
  * AppShell — Anayasa madde 22.7: "bütün modüller aynı evren içindedir".
@@ -22,6 +23,8 @@ export function AppShell() {
   return (
     <div className="relative h-screen w-screen overflow-hidden bg-surface-0">
       <ZoomEngine />
+      {/* Sürükleme şeridi z-drag'de: trail ve dock'un altında (bkz. bileşen). */}
+      <WindowDragRegion />
       <ZoomTrail />
       <Dock />
       <CommandPalette />

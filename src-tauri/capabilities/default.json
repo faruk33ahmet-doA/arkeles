@@ -2,8 +2,11 @@
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
   "description": "ARKELÉS ana pencere yetkileri. Anayasa madde 19: en az yetki ilkesi. Webview'e dosya sistemi veya ağ erişimi VERİLMEZ — bu işler yalnız Rust komutları üzerinden yapılır (madde 19.3).",
-  "windows": ["main"],
+  "windows": [
+    "main"
+  ],
   "permissions": [
-    "core:default"
+    "core:default",
+    "core:window:allow-start-dragging"
   ]
 }

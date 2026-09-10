@@ -64,6 +64,7 @@ export default {
       base: "var(--z-base)",
       layer: "var(--z-layer)",
       panel: "var(--z-panel)",
+      drag: "var(--z-drag)",
       trail: "var(--z-trail)",
       dock: "var(--z-dock)",
       command: "var(--z-command)",
