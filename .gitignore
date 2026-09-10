@@ -1,0 +1,18 @@
+# dependencies
+node_modules/
+# build output
+dist/
+src-tauri/target/
+# rust
+**/*.rs.bk
+# env / local config
+.env
+.env.local
+# os
+.DS_Store
+# editor
+.vscode/*
+!.vscode/extensions.json
+.idea/
+# arkeles local runtime data (never committed — türetilmiş veri, madde 15.3)
+/.arkeles-dev/
