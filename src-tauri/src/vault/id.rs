@@ -12,6 +12,11 @@ Sprint 0: doğrulama fonksiyonu ve geçici kimlik türetimi. Frontmatter'dan
           okuma Sprint 1 (parser ile birlikte).
 */
 
+// SPRINT 0 İSKELETİ: Bu modüldeki fonksiyonlar Sprint 1'de index oluşturucu
+// tarafından çağrılacak. Kural ve testleri şimdi yazıldı çünkü kuralın kendisi
+// kesin (anayasa madde 39.1: teknik borç oluşturulmaz — kuralı sonraya
+// bırakmak borçtur). Bu allow, oluşturucu bağlandığında KALDIRILACAKTIR.
+#![allow(dead_code)]
 /// Frontmatter'da aranan anahtar. Anayasa madde 16.1.
 pub const ID_KEY: &str = "arkeles_id";
 

@@ -19,6 +19,11 @@ Sprint 1'de buraya eklenecek:
     emoji, 5 MB not (madde 39.3)
 */
 
+// SPRINT 0 İSKELETİ: Bu modüldeki fonksiyonlar Sprint 1'de index oluşturucu
+// tarafından çağrılacak. Kural ve testleri şimdi yazıldı çünkü kuralın kendisi
+// kesin (anayasa madde 39.1: teknik borç oluşturulmaz — kuralı sonraya
+// bırakmak borçtur). Bu allow, oluşturucu bağlandığında KALDIRILACAKTIR.
+#![allow(dead_code)]
 use std::path::Path;
 
 /// Vault dizini okunabilir durumda mı?

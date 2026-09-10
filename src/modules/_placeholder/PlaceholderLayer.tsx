@@ -1,7 +1,6 @@
 import { LayerHost } from "@/navigation/layers/LayerHost";
+import { useCurrentLayer } from "@/navigation/layers/LayerContext";
 import { EmptyState } from "@/ui/EmptyState";
-import { useNavigationStore } from "@/state/navigationStore";
-import { getLayer } from "@/navigation/layers/layerRegistry";
 
 /*
  * PlaceholderLayer — Anayasa madde 26.4, 36.1, 36.2.
@@ -11,16 +10,16 @@ import { getLayer } from "@/navigation/layers/layerRegistry";
  * 26.2  Bu yüzden "Veri yok" / "Hata" / "Yapım aşamasında" gibi soğuk
  *       sistem dili kullanılmaz. Sakin ve dürüst bir cümle yeter.
  *
- * Tek bileşen 6 modüle hizmet eder — modül adı trail/store'dan okunur.
- * Amaç: 6 ayrı boş dosya yerine tek doğru boş durum (madde 39.2: modüler).
+ * Tek bileşen 6 modüle hizmet eder. Başlığını LayerContext'ten alır,
+ * global navigasyon durumundan DEĞİL — geçiş sırasında çıkan katman
+ * yeni katmanın başlığını gösterirdi (bkz. LayerContext yorumu).
  */
 
 export default function PlaceholderLayer() {
-  const activeId = useNavigationStore((s) => s.trail[s.trail.length - 1]);
-  const title = activeId ? getLayer(activeId).title : "";
+  const layer = useCurrentLayer();
 
   return (
-    <LayerHost title={title}>
+    <LayerHost title={layer.title}>
       <EmptyState
         message="Bu katman henüz boş."
         hint="Sırası geldiğinde burada gerçek veri olacak."

@@ -42,7 +42,9 @@ export const useNavigationStore = create<NavigationState>((set, get) => ({
   zoomTo: (layer) =>
     set((state) => {
       if (state.trail[state.trail.length - 1] === layer) return state;
-      // Kök zaten trail[0]. Modüle geçişte trail = [kök, modül].
+      // Kök kendisinin çocuğu olamaz: köke "zoom" etmek köke DÖNMEKTİR.
+      if (layer === ROOT_LAYER_ID) return { trail: [ROOT_LAYER_ID] };
+      // Modüle geçişte trail = [kök, modül] — madde 22.5: en fazla 2 seviye.
       return { trail: [ROOT_LAYER_ID, layer] };
     }),
 

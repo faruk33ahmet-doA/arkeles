@@ -59,3 +59,31 @@ describe("navigationStore", () => {
     expect(useNavigationStore.getState().trail).toEqual([ROOT_LAYER_ID]);
   });
 });
+
+describe("navigationStore — kök katman özel durumu", () => {
+  beforeEach(() => {
+    useNavigationStore.setState({ trail: [ROOT_LAYER_ID], isTransitioning: false });
+  });
+
+  it("köke zoom etmek köke DÖNER, trail'i tekrarlamaz", () => {
+    // Komut paletinden "Panel" seçilince oluşan durum.
+    useNavigationStore.getState().zoomTo("work");
+    useNavigationStore.getState().zoomTo(ROOT_LAYER_ID);
+    expect(useNavigationStore.getState().trail).toEqual([ROOT_LAYER_ID]);
+  });
+
+  it("kökteyken köke zoom etmek durumu değiştirmez", () => {
+    const before = useNavigationStore.getState().trail;
+    useNavigationStore.getState().zoomTo(ROOT_LAYER_ID);
+    expect(useNavigationStore.getState().trail).toBe(before);
+  });
+
+  it("trail hiçbir zaman aynı katmanı iki kez içermez", () => {
+    const { zoomTo } = useNavigationStore.getState();
+    for (const id of [ROOT_LAYER_ID, "work", ROOT_LAYER_ID, "health", "health"] as const) {
+      zoomTo(id);
+      const { trail } = useNavigationStore.getState();
+      expect(new Set(trail).size).toBe(trail.length);
+    }
+  });
+});

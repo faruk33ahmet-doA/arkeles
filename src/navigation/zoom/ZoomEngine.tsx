@@ -2,6 +2,7 @@ import { Suspense, lazy, useMemo } from "react";
 import { AnimatePresence, LazyMotion, domAnimation, m } from "framer-motion";
 import { useNavigationStore } from "@/state/navigationStore";
 import { getLayer } from "@/navigation/layers/layerRegistry";
+import { LayerProvider } from "@/navigation/layers/LayerContext";
 import { layerTransition, layerVariants } from "./motion";
 
 /*
@@ -65,11 +66,15 @@ export function ZoomEngine() {
             onAnimationStart={() => setTransitioning(true)}
             onAnimationComplete={() => setTransitioning(false)}
           >
-            {/* Suspense fallback: boş — spinner yok (madde 23.6, 28).
-                Sprint 1'de veri animasyondan önce ısıtılacağı için pratikte görünmez. */}
-            <Suspense fallback={<div className="h-full w-full bg-surface-1" />}>
-              <LayerComponent />
-            </Suspense>
+            {/* Katman kimliği mount anında sabitlenir — çıkan katman
+                global durumu okuyup yanlış başlık göstermesin (LayerContext). */}
+            <LayerProvider value={layer}>
+              {/* Suspense fallback: boş — spinner yok (madde 23.6, 28).
+                  Sprint 1'de veri animasyondan önce ısıtılacağı için pratikte görünmez. */}
+              <Suspense fallback={<div className="h-full w-full bg-surface-1" />}>
+                <LayerComponent />
+              </Suspense>
+            </LayerProvider>
           </m.div>
         </AnimatePresence>
       </div>
