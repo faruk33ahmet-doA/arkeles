@@ -13,7 +13,7 @@ import { ROOT_LAYER_ID } from "@/navigation/layers/layerRegistry";
 
 describe("navigationStore", () => {
   beforeEach(() => {
-    useNavigationStore.setState({ trail: [ROOT_LAYER_ID], isTransitioning: false });
+    useNavigationStore.setState({ trail: [ROOT_LAYER_ID] });
   });
 
   it("kökten başlar", () => {
@@ -62,7 +62,7 @@ describe("navigationStore", () => {
 
 describe("navigationStore — kök katman özel durumu", () => {
   beforeEach(() => {
-    useNavigationStore.setState({ trail: [ROOT_LAYER_ID], isTransitioning: false });
+    useNavigationStore.setState({ trail: [ROOT_LAYER_ID] });
   });
 
   it("köke zoom etmek köke DÖNER, trail'i tekrarlamaz", () => {

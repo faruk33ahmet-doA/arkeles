@@ -15,8 +15,6 @@ import { ROOT_LAYER_ID } from "@/navigation/layers/layerRegistry";
 interface NavigationState {
   /** Zoom Trail — kökten aktif katmana kadarki yol. En az 1 eleman. */
   trail: LayerId[];
-  /** Bir zoom geçişi sürüyor mu? Yalnız gösterge amaçlı (madde 23.5: bloke etmez). */
-  isTransitioning: boolean;
 
   /** Aktif (en üstteki) katman. */
   activeLayer: () => LayerId;
@@ -27,12 +25,10 @@ interface NavigationState {
   zoomOut: () => void;
   /** Doğrudan köke dön. */
   zoomToRoot: () => void;
-  setTransitioning: (value: boolean) => void;
 }
 
 export const useNavigationStore = create<NavigationState>((set, get) => ({
   trail: [ROOT_LAYER_ID],
-  isTransitioning: false,
 
   activeLayer: () => {
     const { trail } = get();
@@ -55,6 +51,4 @@ export const useNavigationStore = create<NavigationState>((set, get) => ({
     }),
 
   zoomToRoot: () => set({ trail: [ROOT_LAYER_ID] }),
-
-  setTransitioning: (value) => set({ isTransitioning: value }),
 }));

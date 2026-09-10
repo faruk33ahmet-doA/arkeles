@@ -3,7 +3,7 @@ import { AnimatePresence, LazyMotion, domAnimation, m } from "framer-motion";
 import { useNavigationStore } from "@/state/navigationStore";
 import { getLayer } from "@/navigation/layers/layerRegistry";
 import { LayerProvider } from "@/navigation/layers/LayerContext";
-import { layerTransition, layerVariants } from "./motion";
+import { layerTransition, layerVariants, type ZoomDirection } from "./motion";
 
 /*
  * Zoom Engine — Anayasa madde 22.4, 22.5, 23.
@@ -13,8 +13,8 @@ import { layerTransition, layerVariants } from "./motion";
  *
  * Anayasa uyumu:
  *  - LazyMotion + domAnimation → framer-motion runtime'ı ~%60 küçülür (madde 14, 34.1)
- *  - Yalnız 1 katman DOM'da: AnimatePresence mode="popLayout" + tek child.
- *    Kaynak katman geçiş biter bitmez unmount olur (madde 23.7).
+ *  - Tek child + değişen key: AnimatePresence geçiş bitince kaynak katmanı
+ *    unmount eder (madde 23.7). Geçiş sırasında kısa süre iki katman DOM'dadır.
  *  - Animasyon dekorasyon: gelen katmana pointer-events engeli KONMAZ (madde 23.5).
  *  - Süre/easing yalnız motion.ts'ten (madde 23.4).
  *
@@ -36,11 +36,15 @@ function getLayerComponent(id: string, loader: () => Promise<{ default: React.Co
 
 export function ZoomEngine() {
   const trail = useNavigationStore((s) => s.trail);
-  const setTransitioning = useNavigationStore((s) => s.setTransitioning);
 
   const activeId = trail[trail.length - 1]!;
   const layer = getLayer(activeId);
-  const isModule = layer.level === 1;
+
+  /*
+   * Kameranın yönü hedef katmanın seviyesinden çıkar:
+   * modüle gidiyorsak "in", panele dönüyorsak "out" (bkz. motion.ts).
+   */
+  const direction: ZoomDirection = layer.level === 1 ? "in" : "out";
 
   const LayerComponent = useMemo(
     () => getLayerComponent(layer.id, layer.component),
@@ -50,21 +54,25 @@ export function ZoomEngine() {
   return (
     <LazyMotion features={domAnimation} strict>
       <div className="relative h-full w-full overflow-hidden">
-        <AnimatePresence
-          mode="popLayout"
-          initial={false}
-          onExitComplete={() => setTransitioning(false)}
-        >
+        {/*
+          Varsayılan "sync" mod: iki katman aynı anda animate olur, arada
+          boşluk kalmaz (madde 23.5). mode="wait" gecikme yaratır, "popLayout"
+          ise bizim absolute katmanlarımızda boşa layout ölçümü yapar.
+
+          `custom={direction}`: ÇIKAN katman önceki render'dan klonlandığı için
+          kendi çıkış yönünü bilemez. AnimatePresence bu değeri çıkış anında
+          varyant fonksiyonuna taşır — yön böylece doğru olur.
+        */}
+        <AnimatePresence initial={false} custom={direction}>
           <m.div
             key={activeId}
+            custom={direction}
             className="absolute inset-0 z-layer"
             variants={layerVariants}
-            initial={isModule ? "enterFromDeep" : "enterFromShallow"}
+            initial="enter"
             animate="center"
-            exit={isModule ? "exitToShallow" : "exitToDeep"}
+            exit="exit"
             transition={layerTransition}
-            onAnimationStart={() => setTransitioning(true)}
-            onAnimationComplete={() => setTransitioning(false)}
           >
             {/* Katman kimliği mount anında sabitlenir — çıkan katman
                 global durumu okuyup yanlış başlık göstermesin (LayerContext). */}
