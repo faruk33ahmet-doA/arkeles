@@ -14,6 +14,7 @@ const NOT_READY: IndexStatus = {
   schemaVersion: 0,
   rebuilding: false,
   lastScanMs: null,
+  rowErrors: 0,
 };
 
 export async function getIndexStatus(): Promise<IndexStatus> {

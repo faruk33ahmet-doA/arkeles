@@ -79,6 +79,14 @@ fn match_checkbox(trimmed: &str) -> Option<(TaskStatus, &str)> {
 }
 
 /// Vade işaretlerini ve fazla boşluğu başlıktan temizler.
+///
+/// `pub` çünkü `writer::rewrite_checkbox` hedef doğrulaması yaparken AYNI
+/// temizliği uygulamak zorunda. İki kopya olsa biri değişince diğeri
+/// sessizce bozulur ve yanlış satıra yazardık.
+pub fn title_from_rest(rest: &str) -> String {
+    clean_title(rest)
+}
+
 fn clean_title(rest: &str) -> String {
     let mut title = rest.trim().to_string();
 

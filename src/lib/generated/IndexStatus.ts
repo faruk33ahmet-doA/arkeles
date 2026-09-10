@@ -9,4 +9,9 @@ schemaVersion: number, rebuilding: boolean,
 /**
  * Son taramanın süresi — performans bütçesi ölçümü (madde 34.2).
  */
-lastScanMs: number | null, };
+lastScanMs: number | null, 
+/**
+ * Sprint 1 borcu #4: sessizce yutulan satır hataları artık GÖRÜNÜR.
+ * 0'dan büyükse index'te bozuk veri var demektir — sakin ama görünür.
+ */
+rowErrors: number, };

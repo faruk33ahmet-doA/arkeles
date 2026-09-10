@@ -40,6 +40,8 @@ export interface Action {
 export interface ActionContext {
   enterLayer: (layer: LayerId) => void;
   closePalette: () => void;
+  /** Hızlı Yakalama panelini açar — madde 10.1. */
+  openQuickCapture: () => void;
 }
 
 /** Katmanlardan otomatik türeyen navigasyon aksiyonları (madde 27.4). */
@@ -58,13 +60,33 @@ function navigationActions(): Action[] {
 }
 
 /*
- * Sprint 0'da yalnız navigasyon aksiyonları GERÇEKTİR.
+ * Hızlı Yakalama — Anayasa madde 10. MEKANİK bir işlemdir (10.3), bu yüzden
+ * Hermes yeteneği GEREKTİRMEZ ve Hermes kapalıyken de çalışır (madde 18.3).
  *
- * Hızlı Yakalama (madde 10) ve semantik aksiyonlar burada BİLİNÇLİ OLARAK
- * TANIMSIZDIR — çünkü madde 18.2 "tıklandığında hata veren buton yoktur"
- * diyor. Yazma altyapısı gelmeden (Sprint 2) paleti sahte komutla doldurmak
- * bu maddeyi ihlal ederdi.
+ * Ama gelen kutusu DOSYASI yoksa görünmez: ARKELÉS o dosyayı oluşturamaz
+ * (10.2) ve madde 18.2 "tıklandığında hata veren buton yoktur" der.
  */
-export function getActions(): Action[] {
-  return [...navigationActions()];
+function quickCaptureAction(): Action {
+  return {
+    id: "capture:quick",
+    title: "Hızlı Yakalama",
+    group: "Yakala",
+    kind: "mechanic",
+    keywords: ["not", "ekle", "yakala", "capture", "inbox", "gelen kutusu"],
+    run: (ctx) => ctx.openQuickCapture(),
+  };
+}
+
+/**
+ * Palette gösterilecek aksiyonlar.
+ *
+ * `inboxAvailable`: madde 10.2 + 18.2 — gelen kutusu dosyası yoksa
+ * Hızlı Yakalama listelenmez.
+ */
+export function getActions(options: { inboxAvailable: boolean }): Action[] {
+  const actions = [...navigationActions()];
+  if (options.inboxAvailable) {
+    actions.push(quickCaptureAction());
+  }
+  return actions;
 }

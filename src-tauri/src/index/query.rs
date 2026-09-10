@@ -20,28 +20,80 @@ use crate::types::{
 };
 use crate::vault::time;
 
+
+/*
+ * SATIR HATALARI — Sprint 1 borcu #4.
+ *
+ * Sprint 1'de her sorgu `.filter_map(Result::ok)` kullanıyordu: bir satırın
+ * dönüştürülmesi başarısız olursa satır SESSİZCE düşüyordu. Bu, index
+ * katmanının en sessiz bozulma yolu.
+ *
+ * Artık her sorgu (sonuç, hata_sayısı) döner:
+ *  - hatalı satır ATLANIR (tek bozuk satır tüm sorguyu çökertmez)
+ *  - ama SAYILIR ve IndexStatus.row_errors üzerinden görünür olur
+ *  - stderr'e loglanır — madde 19.5 gereği YALNIZ tablo adı ve hata tipi,
+ *    NOT İÇERİĞİ ASLA (sağlık/finans verisi hassastır)
+ */
+
+/// Satır dönüşümü başarısız olduğunda: logla, say, atla.
+fn collect_rows<T>(
+    rows: impl Iterator<Item = rusqlite::Result<T>>,
+    table: &str,
+) -> (Vec<T>, u64) {
+    let mut out = Vec::new();
+    let mut errors = 0u64;
+
+    for row in rows {
+        match row {
+            Ok(value) => out.push(value),
+            Err(err) => {
+                errors += 1;
+                // Madde 19.5: yalnız tablo adı ve hata TİPİ. İçerik yok.
+                eprintln!("[index] {table}: satır okunamadı ({})", error_kind(&err));
+            }
+        }
+    }
+
+    (out, errors)
+}
+
+/// Hata tipini içerik sızdırmadan adlandırır (madde 19.5).
+fn error_kind(err: &rusqlite::Error) -> &'static str {
+    match err {
+        rusqlite::Error::InvalidColumnType(..) => "beklenmeyen kolon tipi",
+        rusqlite::Error::IntegralValueOutOfRange(..) => "sayı aralık dışı",
+        rusqlite::Error::Utf8Error(_) => "geçersiz UTF-8",
+        rusqlite::Error::InvalidColumnIndex(_) => "geçersiz kolon indeksi",
+        rusqlite::Error::InvalidColumnName(_) => "geçersiz kolon adı",
+        _ => "diğer",
+    }
+}
+
 /// Panel için kaç kritik görev gösterilir. Madde 24.3: tek bakış kuralı —
 /// kaydırma gerekiyorsa bilgi EKLENMEZ, çıkarılır.
 const CRITICAL_LIMIT: usize = 6;
 
-pub fn today(conn: &Connection) -> CoreResult<TodayView> {
+pub fn today(conn: &Connection) -> CoreResult<(TodayView, u64)> {
     let today = time::today_iso();
+    let mut row_errors = 0u64;
 
-    let overdue = tasks_where(
+    let (overdue, e1) = tasks_where(
         conn,
         "t.status = 'open' AND t.due IS NOT NULL AND t.due < ?1",
         params![today],
         "t.due ASC",
         None,
     )?;
+    row_errors += e1;
 
-    let due = tasks_where(
+    let (due, e2) = tasks_where(
         conn,
         "t.due = ?1",
         params![today],
         "t.status ASC, t.title ASC",
         None,
     )?;
+    row_errors += e2;
 
     let mut stmt = conn
         .prepare(
@@ -52,7 +104,7 @@ pub fn today(conn: &Connection) -> CoreResult<TodayView> {
         )
         .map_err(CoreError::IndexQuery)?;
 
-    let touched_notes = stmt
+    let rows = stmt
         .query_map(params![today], |row| {
             Ok(NoteSummary {
                 id: row.get(0)?,
@@ -61,28 +113,34 @@ pub fn today(conn: &Connection) -> CoreResult<TodayView> {
                 managed: row.get::<_, i64>(3)? != 0,
             })
         })
-        .map_err(CoreError::IndexQuery)?
-        .filter_map(Result::ok)
-        .collect();
+        .map_err(CoreError::IndexQuery)?;
 
-    Ok(TodayView {
-        overdue,
-        due,
-        touched_notes,
-    })
+    let (touched_notes, e3) = collect_rows(rows, "notes");
+    row_errors += e3;
+
+    Ok((
+        TodayView {
+            overdue,
+            due,
+            touched_notes,
+        },
+        row_errors,
+    ))
 }
 
-pub fn dashboard(conn: &Connection) -> CoreResult<DashboardView> {
+pub fn dashboard(conn: &Connection) -> CoreResult<(DashboardView, u64)> {
     let today = time::today_iso();
+    let mut row_errors = 0u64;
 
     // Kritik = vadesi geçmiş + bugün vadesi olan açık görevler, vade sırasıyla.
-    let critical_tasks = tasks_where(
+    let (critical_tasks, e1) = tasks_where(
         conn,
         "t.status = 'open' AND t.due IS NOT NULL AND t.due <= ?1",
         params![today],
         "t.due ASC",
         Some(CRITICAL_LIMIT),
     )?;
+    row_errors += e1;
 
     let mut stmt = conn
         .prepare(
@@ -93,22 +151,26 @@ pub fn dashboard(conn: &Connection) -> CoreResult<DashboardView> {
         )
         .map_err(CoreError::IndexQuery)?;
 
-    let workspaces = stmt
+    let rows = stmt
         .query_map([], |row| {
             Ok(WorkspaceSummary {
                 name: row.get(0)?,
                 open_tasks: row.get::<_, i64>(1)? as u32,
             })
         })
-        .map_err(CoreError::IndexQuery)?
-        .filter_map(Result::ok)
-        .collect();
+        .map_err(CoreError::IndexQuery)?;
 
-    Ok(DashboardView {
-        life_score: life_score(conn)?,
-        workspaces,
-        critical_tasks,
-    })
+    let (workspaces, e2) = collect_rows(rows, "tasks/workspace");
+    row_errors += e2;
+
+    Ok((
+        DashboardView {
+            life_score: life_score(conn)?,
+            workspaces,
+            critical_tasks,
+        },
+        row_errors,
+    ))
 }
 
 /*
@@ -152,10 +214,10 @@ fn life_score(conn: &Connection) -> CoreResult<Option<LifeScore>> {
 }
 
 /// FTS5 üzerinden not arama — madde 27.4 (Cmd+K içinden arama).
-pub fn search(conn: &Connection, query: &str, limit: u32) -> CoreResult<Vec<SearchHit>> {
+pub fn search(conn: &Connection, query: &str, limit: u32) -> CoreResult<(Vec<SearchHit>, u64)> {
     let trimmed = query.trim();
     if trimmed.is_empty() {
-        return Ok(Vec::new());
+        return Ok((Vec::new(), 0));
     }
 
     // FTS5 sözdizimi kullanıcı metnini operatör sanabilir. Tırnak içine alıp
@@ -174,7 +236,7 @@ pub fn search(conn: &Connection, query: &str, limit: u32) -> CoreResult<Vec<Sear
         )
         .map_err(CoreError::IndexQuery)?;
 
-    let hits = stmt
+    let rows = stmt
         .query_map(params![fts_query, limit], |row| {
             Ok(SearchHit {
                 note_id: row.get(0)?,
@@ -182,11 +244,9 @@ pub fn search(conn: &Connection, query: &str, limit: u32) -> CoreResult<Vec<Sear
                 snippet: row.get(2)?,
             })
         })
-        .map_err(CoreError::IndexQuery)?
-        .filter_map(Result::ok)
-        .collect();
+        .map_err(CoreError::IndexQuery)?;
 
-    Ok(hits)
+    Ok(collect_rows(rows, "notes_fts"))
 }
 
 pub fn note_count(conn: &Connection) -> CoreResult<u32> {
@@ -212,7 +272,7 @@ fn tasks_where(
     args: impl rusqlite::Params,
     order: &str,
     limit: Option<usize>,
-) -> CoreResult<Vec<Task>> {
+) -> CoreResult<(Vec<Task>, u64)> {
     let limit_clause = limit.map(|n| format!(" LIMIT {n}")).unwrap_or_default();
     let sql = format!(
         "SELECT t.id, t.title, t.status, t.note_id, t.workspace, t.due, n.managed
@@ -237,5 +297,74 @@ fn tasks_where(
         })
         .map_err(CoreError::IndexQuery)?;
 
-    Ok(rows.filter_map(Result::ok).collect())
+    Ok(collect_rows(rows, "tasks"))
+}
+
+// ===========================================================================
+// MUTASYON HEDEFLERİ — Anayasa madde 8.1, 16.3, 20.2
+// ===========================================================================
+
+/*
+ * Mekanik mutasyon için gereken bilgi index'ten OKUNUR, arayüzden GELMEZ.
+ *
+ * Sebep: arayüzün gönderdiği dosya yoluna, satır numarasına ve "yönetilen mi"
+ * bilgisine güvenmek, webview'i yazma yetkisinin karar mercii yapardı.
+ * Karar çekirdekte verilir (madde 19 en az yetki).
+ */
+
+/// Bir notun yazma hedefi olarak kimliği.
+#[derive(Debug, Clone)]
+pub struct WriteTarget {
+    pub source_path: String,
+    /// Madde 16.3: `false` ise not SALT OKUNUR.
+    pub managed: bool,
+    /// Madde 20.2: index'in bildiği son içerik hash'i.
+    pub content_hash: String,
+}
+
+/// Bir görevin yazma hedefi.
+#[derive(Debug, Clone)]
+pub struct TaskTarget {
+    pub note: WriteTarget,
+    pub line_number: u32,
+    pub title: String,
+    /// "open" | "done"
+    pub status: String,
+}
+
+pub fn write_target(conn: &Connection, note_id: &str) -> CoreResult<WriteTarget> {
+    conn.query_row(
+        "SELECT source_path, managed, content_hash FROM notes WHERE id = ?1",
+        params![note_id],
+        |row| {
+            Ok(WriteTarget {
+                source_path: row.get(0)?,
+                managed: row.get::<_, i64>(1)? != 0,
+                content_hash: row.get(2)?,
+            })
+        },
+    )
+    .map_err(|_| CoreError::TargetMismatch)
+}
+
+pub fn task_target(conn: &Connection, task_id: &str) -> CoreResult<TaskTarget> {
+    conn.query_row(
+        "SELECT n.source_path, n.managed, n.content_hash, t.line_number, t.title, t.status
+         FROM tasks t JOIN notes n ON n.id = t.note_id
+         WHERE t.id = ?1",
+        params![task_id],
+        |row| {
+            Ok(TaskTarget {
+                note: WriteTarget {
+                    source_path: row.get(0)?,
+                    managed: row.get::<_, i64>(1)? != 0,
+                    content_hash: row.get(2)?,
+                },
+                line_number: row.get::<_, i64>(3)? as u32,
+                title: row.get(4)?,
+                status: row.get(5)?,
+            })
+        },
+    )
+    .map_err(|_| CoreError::TargetMismatch)
 }

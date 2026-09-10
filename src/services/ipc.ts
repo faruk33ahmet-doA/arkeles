@@ -32,6 +32,22 @@ export async function ipc<T>(
 }
 
 /**
+ * Ağ YOKLAMASI — Sprint 1 borcu #2.
+ *
+ * Hermes gibi dış servis yoklamaları `probe:` öneki ile ölçülür ve
+ * performans bütçesine TABİ DEĞİLDİR: 500 ms zaman aşımı tasarım gereğidir
+ * (madde 18.4), uygulama yavaşlığı değil.
+ */
+export async function ipcProbe<T>(
+  command: string,
+  fallback: T,
+  args?: Record<string, unknown>,
+): Promise<T> {
+  if (!isTauri()) return fallback;
+  return measure(`probe:${command}` as MetricName, () => invoke<T>(command, args));
+}
+
+/**
  * Hata yutmayan çağrı — kullanıcının BİLİNÇLİ eylemleri için (vault seçimi,
  * index yeniden kurulumu). Madde 25.4: yalnız gerçek arıza akışı keser;
  * ama kullanıcının başlattığı bir iş sessizce başarısız olamaz.

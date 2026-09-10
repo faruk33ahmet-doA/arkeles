@@ -34,6 +34,9 @@ pub struct IndexStatus {
     pub rebuilding: bool,
     /// Son taramanın süresi — performans bütçesi ölçümü (madde 34.2).
     pub last_scan_ms: Option<u32>,
+    /// Sprint 1 borcu #4: sessizce yutulan satır hataları artık GÖRÜNÜR.
+    /// 0'dan büyükse index'te bozuk veri var demektir — sakin ama görünür.
+    pub row_errors: u32,
 }
 
 /// Anayasa madde 18.1 sözleşmesi.

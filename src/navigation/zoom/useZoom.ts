@@ -3,7 +3,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useNavigationStore } from "@/state/navigationStore";
 import { queryKeys } from "@/data/queryKeys";
 import { getToday, getDashboard } from "@/services/vault.service";
-import { sampleTransitionFrames } from "@/lib/perf";
+import { sampleTransitionJank } from "@/lib/perf";
 import { LAYER_DURATION_S } from "./motion";
 import type { LayerId } from "@/navigation/layers/types";
 
@@ -39,8 +39,8 @@ export function useZoom() {
     (layer: LayerId) => {
       // Madde 23.6: ÖNCE ısıt, SONRA geçişi başlat.
       PREFETCH[layer]?.(queryClient);
-      // Madde 34.2: geçiş boyunca kare süreleri örneklenir.
-      sampleTransitionFrames(LAYER_DURATION_S * 1000);
+      // Madde 34.2: geçiş boyunca DÜŞEN KARE oranı örneklenir.
+      sampleTransitionJank(LAYER_DURATION_S * 1000);
       zoomTo(layer);
     },
     [queryClient, zoomTo],
@@ -48,13 +48,13 @@ export function useZoom() {
 
   const goBack = useCallback(() => {
     PREFETCH.dashboard?.(queryClient);
-    sampleTransitionFrames(LAYER_DURATION_S * 1000);
+    sampleTransitionJank(LAYER_DURATION_S * 1000);
     zoomOut();
   }, [queryClient, zoomOut]);
 
   const goRoot = useCallback(() => {
     PREFETCH.dashboard?.(queryClient);
-    sampleTransitionFrames(LAYER_DURATION_S * 1000);
+    sampleTransitionJank(LAYER_DURATION_S * 1000);
     zoomToRoot();
   }, [queryClient, zoomToRoot]);
 

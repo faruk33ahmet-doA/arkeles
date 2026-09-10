@@ -10,6 +10,8 @@
 export type { DashboardView } from "./DashboardView";
 export type { HermesHealth } from "./HermesHealth";
 export type { IndexStatus } from "./IndexStatus";
+export type { InboxStatus } from "./InboxStatus";
+export type { MutationResult } from "./MutationResult";
 export type { LifeScore } from "./LifeScore";
 export type { NoteSummary } from "./NoteSummary";
 export type { ScanReportDto } from "./ScanReportDto";

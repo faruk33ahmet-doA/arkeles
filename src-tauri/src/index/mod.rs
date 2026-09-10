@@ -17,4 +17,5 @@ mod schema;
 mod query_test;
 
 pub use builder::ScanReport;
+pub use query::WriteTarget;
 pub use db::IndexHandle;

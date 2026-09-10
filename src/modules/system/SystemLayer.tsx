@@ -8,7 +8,7 @@ import { useIndexStatus } from "@/data/hooks/useIndexStatus";
 import { useHermesHealth } from "@/data/hooks/useHermesHealth";
 import { rebuildIndex } from "@/services/index.service";
 import { VAULT_DEPENDENT_KEYS, queryKeys } from "@/data/queryKeys";
-import { getColdStartMs, BUDGETS } from "@/lib/perf";
+import { getColdStartMs, getRefreshIntervalMs, BUDGETS } from "@/lib/perf";
 import { PerfTable } from "./components/PerfTable";
 import { cn } from "@/lib/cn";
 import type { ScanReportDto } from "@/lib/generated";
@@ -42,6 +42,7 @@ export default function SystemLayer() {
   });
 
   const coldStart = getColdStartMs();
+  const refresh = getRefreshIntervalMs();
 
   return (
     <LayerHost title="Sistem">
@@ -69,6 +70,16 @@ export default function SystemLayer() {
                   : `Index şema v${index?.schemaVersion ?? 0}`
               }
             />
+            {/*
+              Sprint 1 borcu #4: satır hataları artık GÖRÜNÜR.
+              0 ise hiç gösterilmez — sıfırı duyurmak gürültüdür (madde 5).
+            */}
+            {index && index.rowErrors > 0 ? (
+              <StatusDot
+                status="attention"
+                label={`${index.rowErrors} satır okunamadı`}
+              />
+            ) : null}
             {vault?.indexedAt ? (
               <p className="pl-4 text-xs text-text-tertiary">
                 Son tarama: {vault.indexedAt}
@@ -108,6 +119,14 @@ export default function SystemLayer() {
             ) : null
           }
         >
+          {/* Sprint 1 borcu #3: jank ölçümü ekranın kendi hızına göre. */}
+          {refresh !== null ? (
+            <p className="mb-4 text-xs text-text-tertiary">
+              Ekran kare aralığı {refresh.toFixed(1)} ms
+              {" · "}
+              düşen kare ölçümü buna göre yapılıyor
+            </p>
+          ) : null}
           <PerfTable />
         </Card>
 

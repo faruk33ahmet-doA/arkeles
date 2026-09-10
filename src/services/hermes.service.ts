@@ -1,4 +1,4 @@
-import { ipc } from "./ipc";
+import { ipcProbe } from "./ipc";
 import type { HermesHealth } from "@/lib/generated";
 
 /*
@@ -11,8 +11,15 @@ import type { HermesHealth } from "@/lib/generated";
 
 const OFFLINE: HermesHealth = { reachable: false, version: null, capabilities: [] };
 
+/*
+ * Sprint 1 borcu #2: bu bir AĞ YOKLAMASIDIR, performans metriği değil.
+ *
+ * Hermes kapalıyken çekirdek 500 ms TCP zaman aşımı bekler — tasarım gereği
+ * (madde 18.4). `ipcProbe` bu çağrıyı `probe:` öneki ile ölçer ve bütçe
+ * dışında tutar.
+ */
 export async function getHermesHealth(): Promise<HermesHealth> {
-  return ipc<HermesHealth>("hermes_health", OFFLINE);
+  return ipcProbe<HermesHealth>("hermes_health", OFFLINE);
 }
 
 /** Madde 18.2 filtresi — bildirilmeyen yetenek arayüzde HİÇ görünmez. */

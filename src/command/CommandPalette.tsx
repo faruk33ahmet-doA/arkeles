@@ -18,6 +18,8 @@ import { useCommandStore } from "@/state/commandStore";
 import { useZoom } from "@/navigation/zoom/useZoom";
 import { useHermesHealth } from "@/data/hooks/useHermesHealth";
 import { useSearch } from "@/data/hooks/useSearch";
+import { useInboxStatus } from "@/data/hooks/useInboxStatus";
+import { QuickCapture } from "./QuickCapture";
 import { getActions, type Action, type ActionContext } from "./actionRegistry";
 import { cn } from "@/lib/cn";
 
@@ -50,6 +52,20 @@ export function CommandPalette() {
 
   const [query, setQuery] = useState("");
   const { data: hits } = useSearch(query);
+  const { data: inbox } = useInboxStatus();
+
+  /*
+   * Palet iki kipte çalışır: aksiyon listesi ve Hızlı Yakalama.
+   * Kip değişimi ANİDİR — geçiş animasyonu yok (madde 30.2: cam yüzey
+   * animate edilmez, ve madde 23.2: dekoratif hareket yasak).
+   */
+  const [mode, setMode] = useState<"list" | "capture">("list");
+
+  const close = () => {
+    setOpen(false);
+    setQuery("");
+    setMode("list");
+  };
 
   const ctx: ActionContext = useMemo(
     () => ({
@@ -57,21 +73,23 @@ export function CommandPalette() {
       closePalette: () => {
         setOpen(false);
         setQuery("");
+        setMode("list");
       },
+      openQuickCapture: () => setMode("capture"),
     }),
     [enterLayer, setOpen],
   );
 
   // Madde 18.2 filtresi: yeteneği olmayan semantik aksiyon gizlenir.
   const visibleActions = useMemo(() => {
-    return getActions().filter((action) => {
+    return getActions({ inboxAvailable: inbox?.exists === true }).filter((action) => {
       if (action.kind !== "semantic") return true;
       if (!action.capability) return false;
       return (
         hermes?.reachable === true && hermes.capabilities.includes(action.capability)
       );
     });
-  }, [hermes]);
+  }, [hermes, inbox]);
 
   const groups = useMemo(() => groupActions(visibleActions), [visibleActions]);
 
@@ -80,7 +98,10 @@ export function CommandPalette() {
       open={open}
       onOpenChange={(next) => {
         setOpen(next);
-        if (!next) setQuery("");
+        if (!next) {
+          setQuery("");
+          setMode("list");
+        }
       }}
     >
       <DialogPortal>
@@ -94,8 +115,13 @@ export function CommandPalette() {
             "outline-none",
           )}
         >
-          <DialogTitle className="sr-only">Komut paleti</DialogTitle>
+          <DialogTitle className="sr-only">
+            {mode === "capture" ? "Hızlı Yakalama" : "Komut paleti"}
+          </DialogTitle>
 
+          {mode === "capture" ? (
+            <QuickCapture inboxPath={inbox?.path ?? ""} onDone={close} />
+          ) : (
           <Command
             // cmdk'nın kendi filtresi aksiyonlar için; not sonuçları
             // çekirdekten FTS5 ile GELDİĞİ İÇİN yeniden filtrelenmemeli.
@@ -170,6 +196,7 @@ export function CommandPalette() {
               ) : null}
             </CommandList>
           </Command>
+          )}
         </DialogContent>
       </DialogPortal>
     </Dialog>

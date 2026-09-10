@@ -9,6 +9,7 @@ export const queryKeys = {
   hermes: { health: ["hermes", "health"] as const },
   vault: { status: ["vault", "status"] as const },
   index: { status: ["index", "status"] as const },
+  inbox: { status: ["inbox", "status"] as const },
   today: { view: ["today", "view"] as const },
   dashboard: { view: ["dashboard", "view"] as const },
   search: (query: string) => ["search", query] as const,
@@ -24,5 +25,7 @@ export const VAULT_DEPENDENT_KEYS = [
   queryKeys.today.view,
   queryKeys.dashboard.view,
   queryKeys.vault.status,
+  // Gelen kutusu dosyası vault içinde: oluşturulunca Hızlı Yakalama açılmalı.
+  queryKeys.inbox.status,
   ["search"],
 ] as const;

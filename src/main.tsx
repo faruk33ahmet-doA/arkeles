@@ -2,7 +2,7 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App";
 import { applyTheme, DEFAULT_THEME } from "@/design/theme";
-import { markColdStartOrigin } from "@/lib/perf";
+import { calibrateRefreshRate, markColdStartOrigin } from "@/lib/perf";
 import "@/design/tokens.css";
 import "./index.css";
 
@@ -18,6 +18,13 @@ applyTheme(DEFAULT_THEME);
  * (DashboardLayer → markFirstMeaningfulPaint).
  */
 markColdStartOrigin();
+
+/*
+ * Ekranın tazeleme aralığını ölç — Sprint 1 borcu #3.
+ * Jank ölçümü sabit 8,3 ms yerine BU değere göre yapılır; böylece 60 Hz ve
+ * 120 Hz ekranlarda aynı anlamı taşır.
+ */
+calibrateRefreshRate();
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>

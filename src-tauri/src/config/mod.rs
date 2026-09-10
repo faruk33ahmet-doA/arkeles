@@ -20,7 +20,21 @@ pub struct ConfigData {
     /// Anayasa madde 17.3: sabit kodlanamaz. Yapılandırılmadıysa `None`.
     #[serde(default)]
     pub vault_path: Option<PathBuf>,
+
+    /*
+     * Hızlı Yakalama gelen kutusu — Anayasa madde 10.2.
+     *
+     * Vault köküne göre YOL. ARKELÉS bu dosyayı OLUŞTURMAZ (madde 10.2
+     * "yeni dosya açmaz"); yalnız var olana ham satır ekler. Dosya yoksa
+     * Hızlı Yakalama arayüzde görünmez (madde 18.2).
+     */
+    #[serde(default)]
+    pub inbox_path: Option<String>,
 }
+
+/// Gelen kutusu için varsayılan yol. Kullanıcı veya Hermes bu dosyayı
+/// oluşturana kadar Hızlı Yakalama pasif kalır.
+pub const DEFAULT_INBOX: &str = "Gelen Kutusu.md";
 
 /// Yapılandırmanın canlı hali. Vault değiştiğinde yazılabilir olmalı,
 /// bu yüzden RwLock: okuma çok, yazma nadir.
@@ -62,6 +76,14 @@ impl Config {
     /// Yapılandırılmış vault yolu. Madde 17.3: `None` geçerli bir durumdur.
     pub fn vault_path(&self) -> Option<PathBuf> {
         self.read().vault_path.clone()
+    }
+
+    /// Gelen kutusu yolu — Anayasa madde 10.2.
+    pub fn inbox_path(&self) -> String {
+        self.read()
+            .inbox_path
+            .clone()
+            .unwrap_or_else(|| DEFAULT_INBOX.to_string())
     }
 
     /// Vault yolunu değiştirir ve diske yazar.

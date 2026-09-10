@@ -122,6 +122,12 @@ pub fn run() {
             ipc::index_cmds::index_status,
             ipc::index_cmds::rebuild_index,
             ipc::hermes_cmds::hermes_health,
+            // Mekanik mutasyonlar — madde 8.1. Semantik mutasyon BURAYA EKLENEMEZ.
+            ipc::mutation_cmds::set_task_status,
+            ipc::mutation_cmds::set_frontmatter_field,
+            ipc::mutation_cmds::toggle_tag,
+            ipc::mutation_cmds::quick_capture,
+            ipc::mutation_cmds::inbox_status,
         ])
         .run(tauri::generate_context!())
         .expect("ARKELÉS başlatılamadı");

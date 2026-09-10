@@ -17,9 +17,10 @@ import { cn } from "@/lib/cn";
 
 const REFRESH_MS = 1000;
 
-function format(ms: number): string {
-  if (ms < 10) return `${ms.toFixed(1)} ms`;
-  return `${Math.round(ms)} ms`;
+function format(value: number, unit: "ms" | "%"): string {
+  if (unit === "%") return `${value.toFixed(1)} %`;
+  if (value < 10) return `${value.toFixed(1)} ms`;
+  return `${Math.round(value)} ms`;
 }
 
 export function PerfTable() {
@@ -54,12 +55,13 @@ export function PerfTable() {
         <tbody>
           {rows.map((row) => {
             const budget = budgetFor(row.name);
+            // Sprint 1 borcu #2: `probe:` metrikleri bütçeye tabi değil.
             const over = budget !== null && row.p95 > budget;
             return (
               <tr key={row.name} className="border-b border-border-subtle">
                 <td className="py-2 pr-4 text-text-primary">{row.name}</td>
                 <td className="py-2 pr-4 text-right tabular-nums text-text-secondary">
-                  {format(row.p50)}
+                  {format(row.p50, row.unit)}
                 </td>
                 <td
                   className={cn(
@@ -67,13 +69,13 @@ export function PerfTable() {
                     over ? "text-status-attention" : "text-text-primary",
                   )}
                 >
-                  {format(row.p95)}
+                  {format(row.p95, row.unit)}
                 </td>
                 <td className="py-2 pr-4 text-right tabular-nums text-text-secondary">
-                  {format(row.max)}
+                  {format(row.max, row.unit)}
                 </td>
                 <td className="py-2 pr-4 text-right tabular-nums text-text-tertiary">
-                  {budget !== null ? format(budget) : "—"}
+                  {budget !== null ? format(budget, row.unit) : "—"}
                 </td>
                 <td className="py-2 text-right tabular-nums text-text-tertiary">
                   {row.count}

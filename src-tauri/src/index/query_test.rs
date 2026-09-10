@@ -20,6 +20,30 @@ fn memory_index() -> Connection {
     conn
 }
 
+
+/*
+ * Sorgular artık (sonuç, satır_hatası_sayısı) döner — Sprint 1 borcu #4.
+ * Testler sonuca bakar; hata sayısının 0 olduğunu da DOĞRULAR, çünkü
+ * fixture verisi temiz ve hatalı satır çıkması bir gerileme olurdu.
+ */
+fn today_ok(conn: &Connection) -> crate::types::TodayView {
+    let (view, errors) = query::today(conn).expect("today sorgusu");
+    assert_eq!(errors, 0, "temiz fixture'da satır hatası olmamalı");
+    view
+}
+
+fn dashboard_ok(conn: &Connection) -> crate::types::DashboardView {
+    let (view, errors) = query::dashboard(conn).expect("dashboard sorgusu");
+    assert_eq!(errors, 0, "temiz fixture'da satır hatası olmamalı");
+    view
+}
+
+fn search_ok(conn: &Connection, q: &str) -> Vec<crate::types::SearchHit> {
+    let (hits, errors) = query::search(conn, q, 20).expect("arama sorgusu");
+    assert_eq!(errors, 0, "temiz fixture'da satır hatası olmamalı");
+    hits
+}
+
 fn insert_note(conn: &Connection, id: &str, title: &str, body: &str, frontmatter: &str) {
     conn.execute(
         "INSERT INTO notes (id, source_path, title, managed, content_hash, modified_at, frontmatter)
@@ -48,7 +72,7 @@ fn arama_baslikta_eslesir() {
     let conn = memory_index();
     insert_note(&conn, "n1", "TüGA Sponsorluk", "gövde metni", "{}");
 
-    let hits = query::search(&conn, "sponsor", 20).expect("arama başarılı olmalı");
+    let hits = search_ok(&conn, "sponsor");
     assert_eq!(hits.len(), 1, "önek araması başlıkta eşleşmeli");
     assert_eq!(hits[0].title, "TüGA Sponsorluk");
 }
@@ -58,7 +82,7 @@ fn arama_govdede_eslesir_ve_snippet_dondurur() {
     let conn = memory_index();
     insert_note(&conn, "n1", "Başlık", "burada sponsorluk dosyası geçiyor", "{}");
 
-    let hits = query::search(&conn, "sponsorluk", 20).unwrap();
+    let hits = search_ok(&conn, "sponsorluk");
     assert_eq!(hits.len(), 1);
     assert!(!hits[0].snippet.is_empty(), "snippet üretilmeli");
 }
@@ -67,8 +91,8 @@ fn arama_govdede_eslesir_ve_snippet_dondurur() {
 fn arama_bos_sorguda_bos_doner() {
     let conn = memory_index();
     insert_note(&conn, "n1", "Bir şey", "gövde", "{}");
-    assert!(query::search(&conn, "", 20).unwrap().is_empty());
-    assert!(query::search(&conn, "   ", 20).unwrap().is_empty());
+    assert!(search_ok(&conn, "").is_empty());
+    assert!(search_ok(&conn, "   ").is_empty());
 }
 
 #[test]
@@ -80,6 +104,7 @@ fn arama_fts_operatorlerini_metin_olarak_ele_alir() {
     for hostile in ["OR", "AND", "NEAR(a b)", "\"", "a*b", "(", ")", "-", "^"] {
         let result = query::search(&conn, hostile, 20);
         assert!(result.is_ok(), "sorgu çökmemeli: {hostile}");
+        assert_eq!(result.unwrap().1, 0, "satır hatası olmamalı: {hostile}");
     }
 }
 
@@ -88,7 +113,7 @@ fn arama_turkce_karakterlerde_calisir() {
     let conn = memory_index();
     insert_note(&conn, "n1", "Öğrenciyiz Planı", "içerik", "{}");
 
-    let hits = query::search(&conn, "öğrenci", 20).unwrap();
+    let hits = search_ok(&conn, "öğrenci");
     assert_eq!(hits.len(), 1, "Türkçe önek araması eşleşmeli");
 }
 
@@ -102,7 +127,7 @@ fn bugun_gorunumu_geciken_ve_bugunu_ayirir() {
     insert_task(&conn, "t2", "n1", "bugün", "open", Some(&today), Some("WIF"));
     insert_task(&conn, "t3", "n1", "gelecek", "open", Some("2099-01-01"), Some("WIF"));
 
-    let view = query::today(&conn).unwrap();
+    let view = today_ok(&conn);
     assert_eq!(view.overdue.len(), 1);
     assert_eq!(view.overdue[0].title, "geciken");
     assert_eq!(view.due.len(), 1);
@@ -116,7 +141,7 @@ fn bugun_gorunumu_bitmis_gecikeni_saymaz() {
     insert_note(&conn, "n1", "Not", "gövde", "{}");
     insert_task(&conn, "t1", "n1", "bitmiş geciken", "done", Some("2020-01-01"), None);
 
-    let view = query::today(&conn).unwrap();
+    let view = today_ok(&conn);
     assert!(view.overdue.is_empty(), "bitmiş görev geciken sayılmaz");
 }
 
@@ -129,7 +154,7 @@ fn panel_calisma_alanlarini_sayar() {
     insert_task(&conn, "t3", "n1", "c", "open", None, Some("TüGA"));
     insert_task(&conn, "t4", "n1", "d", "done", None, Some("TüGA"));
 
-    let view = query::dashboard(&conn).unwrap();
+    let view = dashboard_ok(&conn);
     let wif = view.workspaces.iter().find(|w| w.name == "WIF").unwrap();
     let tuga = view.workspaces.iter().find(|w| w.name == "TüGA").unwrap();
     assert_eq!(wif.open_tasks, 2);
@@ -151,7 +176,7 @@ fn hayat_skoru_hermesin_yazdigi_nottan_okunur() {
         r#"{"arkeles_type":"life_score","value":72,"computed_at":"2026-09-10T06:00:00Z"}"#,
     );
 
-    let view = query::dashboard(&conn).unwrap();
+    let view = dashboard_ok(&conn);
     let score = view.life_score.expect("skor okunmalı");
     assert_eq!(score.value, 72.0);
     assert_eq!(score.computed_at, "2026-09-10T06:00:00Z");
@@ -161,7 +186,7 @@ fn hayat_skoru_hermesin_yazdigi_nottan_okunur() {
 fn hayat_skoru_yoksa_none_doner() {
     let conn = memory_index();
     insert_note(&conn, "n1", "sıradan not", "gövde", "{}");
-    assert!(query::dashboard(&conn).unwrap().life_score.is_none());
+    assert!(dashboard_ok(&conn).life_score.is_none());
 }
 
 #[test]
@@ -175,7 +200,7 @@ fn hayat_skoru_bozuksa_none_doner() {
         "gövde",
         r#"{"arkeles_type":"life_score","value":"yetmiş iki"}"#,
     );
-    assert!(query::dashboard(&conn).unwrap().life_score.is_none());
+    assert!(dashboard_ok(&conn).life_score.is_none());
 }
 
 #[test]
@@ -191,7 +216,7 @@ fn gorev_yonetilmeyen_notu_isaretler() {
     let today = crate::vault::time::today_iso();
     insert_task(&conn, "t1", "p1", "görev", "open", Some(&today), None);
 
-    let view = query::today(&conn).unwrap();
+    let view = today_ok(&conn);
     assert_eq!(view.due.len(), 1);
     assert!(!view.due[0].managed, "yönetilmeyen olarak işaretlenmeli");
 }

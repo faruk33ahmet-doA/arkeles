@@ -2,6 +2,7 @@ import { ZoomEngine } from "@/navigation/zoom/ZoomEngine";
 import { Dock } from "@/navigation/dock/Dock";
 import { ZoomTrail } from "@/navigation/trail/ZoomTrail";
 import { CommandPalette } from "@/command/CommandPalette";
+import { ConflictPanel } from "@/ui/ConflictPanel";
 import { useCommandPaletteHotkey } from "@/command/useCommandPalette";
 import { useVaultStatus } from "@/data/hooks/useVaultStatus";
 import { useVaultChanged } from "@/data/hooks/useVaultChanged";
@@ -47,6 +48,8 @@ export function AppShell() {
           <ZoomTrail />
           <Dock />
           <CommandPalette />
+          {/* Madde 25.4: akışı kesmeye yetkili TEK durum. */}
+          <ConflictPanel />
         </>
       )}
     </div>

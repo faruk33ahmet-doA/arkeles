@@ -29,6 +29,65 @@ pub enum CoreError {
 
     #[error("seçilen klasör okunamıyor")]
     VaultUnreadable,
+
+    /*
+     * Aşağıdakiler MEKANİK MUTASYON hatalarıdır (madde 8.1, 20).
+     * Hepsi arayüzde ayrı davranış gerektirir, bu yüzden ayrı varyant:
+     * çakışma kullanıcıya sorulur, diğerleri sakin bir durumdur.
+     */
+
+    /// Madde 20.3: dosya beklenenden farklı — SESSİZCE ÜZERİNE YAZILMAZ.
+    #[error("içerik başka bir kaynak tarafından değiştirildi")]
+    Conflict,
+
+    /// Hedef satır beklenen görev değil, ya da yazılamaz bir istek.
+    #[error("hedef bulunamadı veya değişmiş")]
+    TargetMismatch,
+
+    /// Madde 16.3: `arkeles_id` taşımayan not SALT OKUNUR.
+    #[error("bu not yönetilmiyor, yazılamaz")]
+    NoteUnmanaged,
+
+    /// Madde 8.2: istenen şey semantik mutasyon — Hermes'in alanı.
+    #[error("bu işlem Hermes'in alanında")]
+    SemanticMutationRefused,
+
+    /// Madde 8.1: frontmatter oluşturmak yapı kurmaktır, mekanik değil.
+    #[error("notun frontmatter bölümü yok")]
+    NoFrontmatter,
+
+    /// Madde 10.2: ARKELÉS yeni dosya AÇMAZ.
+    #[error("gelen kutusu dosyası yok")]
+    InboxMissing,
+
+    /// Madde 19: vault dışına yazma girişimi.
+    #[error("yol vault dışında")]
+    PathOutsideVault,
+
+    #[error("dosya yazılamadı")]
+    WriteFailed(#[source] std::io::Error),
+}
+
+impl CoreError {
+    /// Arayüzün dallanabilmesi için kararlı bir kod. Metin değişebilir,
+    /// bu kod DEĞİŞMEZ — çakışma UI'si buna göre açılır (madde 4).
+    pub fn code(&self) -> &'static str {
+        match self {
+            CoreError::Conflict => "conflict",
+            CoreError::TargetMismatch => "target_mismatch",
+            CoreError::NoteUnmanaged => "note_unmanaged",
+            CoreError::SemanticMutationRefused => "semantic_refused",
+            CoreError::NoFrontmatter => "no_frontmatter",
+            CoreError::InboxMissing => "inbox_missing",
+            CoreError::PathOutsideVault => "path_outside_vault",
+            CoreError::WriteFailed(_) => "write_failed",
+            CoreError::VaultNotConfigured => "vault_not_configured",
+            CoreError::VaultUnreadable => "vault_unreadable",
+            CoreError::Config(_) => "config",
+            CoreError::IndexOpen(_) | CoreError::IndexQuery(_) => "index",
+            CoreError::AppDirUnavailable => "app_dir",
+        }
+    }
 }
 
 pub type CoreResult<T> = Result<T, CoreError>;
@@ -40,6 +99,12 @@ pub type CoreResult<T> = Result<T, CoreError>;
  */
 impl Serialize for CoreError {
     fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        serializer.serialize_str(&self.to_string())
+        use serde::ser::SerializeStruct;
+        // Arayüz `code` ile dallanır, `message` ile konuşur.
+        // Kaynak zincir GİTMEZ: dosya yolu içerebilir (madde 19.5).
+        let mut state = serializer.serialize_struct("CoreError", 2)?;
+        state.serialize_field("code", self.code())?;
+        state.serialize_field("message", &self.to_string())?;
+        state.end()
     }
 }

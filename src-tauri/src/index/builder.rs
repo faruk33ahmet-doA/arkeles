@@ -28,6 +28,10 @@ pub struct ScanReport {
     pub unchanged: usize,
     /// Vault'tan silindiği için index'ten düşen not sayısı.
     pub removed: usize,
+    /// Okunamayan dosya sayısı. Sprint 1 borcu #4: artık SAYILIYOR, yutulmuyor.
+    pub unreadable: usize,
+    /// Index satır hataları. Sprint 1 borcu #4.
+    pub row_errors: usize,
     pub duration_ms: u64,
 }
 
@@ -50,7 +54,11 @@ pub fn full_scan(conn: &mut Connection, vault_root: &Path) -> CoreResult<ScanRep
         report.scanned += 1;
 
         let Some(note) = reader::read_note(vault_root, path) else {
-            continue; // okunamayan dosya sessizce atlanır
+            // Sprint 1 borcu #4: sessizce atlamıyoruz — sayıyoruz ve logluyoruz.
+            // Madde 19.5: yalnız YOL loglanır, içerik asla.
+            report.unreadable += 1;
+            eprintln!("[index] okunamadı: {}", path.display());
+            continue;
         };
         seen_paths.push(note.source_path.clone());
 
@@ -230,6 +238,9 @@ fn upsert_note(tx: &Transaction<'_>, note: &ParsedNote) -> CoreResult<()> {
 }
 
 fn delete_by_path(tx: &Transaction<'_>, source_path: &str) -> CoreResult<usize> {
+    // Satır hatası burada VERİ KAYBI riski taşır: silinmesi gereken bir
+    // FTS kaydını atlarsak index tutarsız kalır. Bu yüzden hata YUTULMAZ,
+    // yukarı fırlatılır (Sprint 1 borcu #4).
     let ids: Vec<String> = {
         let mut stmt = tx
             .prepare("SELECT id FROM notes WHERE source_path = ?1")
@@ -237,7 +248,8 @@ fn delete_by_path(tx: &Transaction<'_>, source_path: &str) -> CoreResult<usize> 
         let rows = stmt
             .query_map(params![source_path], |row| row.get::<_, String>(0))
             .map_err(CoreError::IndexQuery)?;
-        rows.filter_map(Result::ok).collect()
+        rows.collect::<rusqlite::Result<Vec<String>>>()
+            .map_err(CoreError::IndexQuery)?
     };
 
     for id in &ids {
@@ -254,6 +266,7 @@ fn delete_by_path(tx: &Transaction<'_>, source_path: &str) -> CoreResult<usize> 
 
 /// Vault'ta artık bulunmayan notları index'ten düşürür.
 fn remove_missing(tx: &Transaction<'_>, seen_paths: &[String]) -> CoreResult<usize> {
+    // Aynı gerekçe: eksik yolu atlamak, silinmiş notu index'te bırakır.
     let indexed: Vec<String> = {
         let mut stmt = tx
             .prepare("SELECT source_path FROM notes")
@@ -261,7 +274,8 @@ fn remove_missing(tx: &Transaction<'_>, seen_paths: &[String]) -> CoreResult<usi
         let rows = stmt
             .query_map([], |row| row.get::<_, String>(0))
             .map_err(CoreError::IndexQuery)?;
-        rows.filter_map(Result::ok).collect()
+        rows.collect::<rusqlite::Result<Vec<String>>>()
+            .map_err(CoreError::IndexQuery)?
     };
 
     let seen: std::collections::HashSet<&str> = seen_paths.iter().map(String::as_str).collect();
