@@ -19,6 +19,8 @@ import { useZoom } from "@/navigation/zoom/useZoom";
 import { useHermesHealth } from "@/data/hooks/useHermesHealth";
 import { useSearch } from "@/data/hooks/useSearch";
 import { useInboxStatus } from "@/data/hooks/useInboxStatus";
+import { useWorkspaces } from "@/data/hooks/useWork";
+import { useWorkStore } from "@/state/workStore";
 import { QuickCapture } from "./QuickCapture";
 import { getActions, type Action, type ActionContext } from "./actionRegistry";
 import { cn } from "@/lib/cn";
@@ -53,6 +55,9 @@ export function CommandPalette() {
   const [query, setQuery] = useState("");
   const { data: hits } = useSearch(query);
   const { data: inbox } = useInboxStatus();
+  const { data: workspaces } = useWorkspaces();
+  const openWorkspaceInStore = useWorkStore((s) => s.openWorkspace);
+  const setPanel = useWorkStore((s) => s.setPanel);
 
   /*
    * Palet iki kipte çalışır: aksiyon listesi ve Hızlı Yakalama.
@@ -76,20 +81,30 @@ export function CommandPalette() {
         setMode("list");
       },
       openQuickCapture: () => setMode("capture"),
+      // Sprint 3 madde 13: tek navigasyon yolu — İş katmanına zoom edip
+      // çalışma alanını açar. Paralel bir sistem kurulmaz.
+      openWorkspace: (workspaceId, panel) => {
+        openWorkspaceInStore(workspaceId);
+        if (panel) setPanel(panel);
+        enterLayer("work");
+      },
     }),
-    [enterLayer, setOpen],
+    [enterLayer, setOpen, openWorkspaceInStore, setPanel],
   );
 
   // Madde 18.2 filtresi: yeteneği olmayan semantik aksiyon gizlenir.
   const visibleActions = useMemo(() => {
-    return getActions({ inboxAvailable: inbox?.exists === true }).filter((action) => {
+    return getActions({
+      inboxAvailable: inbox?.exists === true,
+      workspaces,
+    }).filter((action) => {
       if (action.kind !== "semantic") return true;
       if (!action.capability) return false;
       return (
         hermes?.reachable === true && hermes.capabilities.includes(action.capability)
       );
     });
-  }, [hermes, inbox]);
+  }, [hermes, inbox, workspaces]);
 
   const groups = useMemo(() => groupActions(visibleActions), [visibleActions]);
 

@@ -15,7 +15,7 @@ use std::path::{Path, PathBuf};
 
 use sha2::{Digest, Sha256};
 
-use crate::vault::note::ParsedNote;
+use crate::vault::note::{NoteKind, ParsedNote};
 use crate::vault::{frontmatter, id, links, tasks};
 
 /// Anayasa madde 34.1: bir notun index'lenmesi ucuz olmalı. 5 MB'ın üstündeki
@@ -37,16 +37,34 @@ pub fn is_sync_artifact(file_name: &str) -> bool {
         || file_name.contains("(Çakışan")
 }
 
-/// Vault içindeki bütün markdown dosyalarını toplar.
+/// Taramada bulunan dosyalar.
+#[derive(Debug, Default)]
+pub struct VaultFiles {
+    pub markdown: Vec<PathBuf>,
+    /// Markdown OLMAYAN dosyalar — belgeler (madde 7.2: Obsidian'ın parçası).
+    pub documents: Vec<PathBuf>,
+}
+
+/// Vault içindeki dosyaları toplar.
 ///
 /// Gizli klasörler (`.obsidian`, `.git`, `.trash`) atlanır — madde 20.5.
-pub fn collect_markdown_files(vault_root: &Path) -> Vec<PathBuf> {
-    let mut out = Vec::new();
+pub fn collect_files(vault_root: &Path) -> VaultFiles {
+    let mut out = VaultFiles::default();
     walk(vault_root, &mut out);
     out
 }
 
-fn walk(dir: &Path, out: &mut Vec<PathBuf>) {
+/// Belge sayılan uzantılar.
+///
+/// Beyaz liste, kara liste DEĞİL: vault'ta ne olduğunu varsaymayız
+/// (madde 6.3). Tanınmayan uzantı belge sayılmaz, index'i kirletmez.
+const DOCUMENT_EXTENSIONS: &[&str] = &[
+    "pdf", "docx", "doc", "pptx", "ppt", "xlsx", "xls", "csv",
+    "png", "jpg", "jpeg", "gif", "svg", "webp", "heic",
+    "mp3", "m4a", "wav", "mp4", "mov", "zip",
+];
+
+fn walk(dir: &Path, out: &mut VaultFiles) {
     let Ok(entries) = std::fs::read_dir(dir) else {
         return; // erişilemeyen klasör sessizce atlanır
     };
@@ -61,13 +79,44 @@ fn walk(dir: &Path, out: &mut Vec<PathBuf>) {
         match entry.file_type() {
             Ok(ft) if ft.is_dir() => walk(&path, out),
             Ok(ft) if ft.is_file() => {
-                if path.extension().is_some_and(|e| e.eq_ignore_ascii_case("md")) {
-                    out.push(path);
+                let Some(ext) = path.extension().and_then(|e| e.to_str()) else {
+                    continue;
+                };
+                let lower = ext.to_ascii_lowercase();
+                if lower == "md" {
+                    out.markdown.push(path);
+                } else if DOCUMENT_EXTENSIONS.contains(&lower.as_str()) {
+                    out.documents.push(path);
                 }
             }
             _ => {}
         }
     }
+}
+
+/// Bir belgenin index kaydı için okunan özet. İçerik OKUNMAZ.
+pub struct DocumentInfo {
+    pub source_path: String,
+    pub file_name: String,
+    pub extension: String,
+    pub size_bytes: u64,
+    pub modified_at: String,
+}
+
+pub fn read_document(vault_root: &Path, path: &Path) -> Option<DocumentInfo> {
+    let metadata = std::fs::metadata(path).ok()?;
+    let source_path = relative_path(vault_root, path);
+
+    Some(DocumentInfo {
+        file_name: path.file_name()?.to_string_lossy().into_owned(),
+        extension: path
+            .extension()
+            .map(|e| e.to_string_lossy().to_ascii_lowercase())
+            .unwrap_or_default(),
+        size_bytes: metadata.len(),
+        modified_at: file_modified_iso(path),
+        source_path,
+    })
 }
 
 /// Tek bir notu okur ve ayrıştırır.
@@ -96,11 +145,18 @@ pub fn read_note(vault_root: &Path, path: &Path) -> Option<ParsedNote> {
         _ => (id::transient_id(&source_path), false),
     };
 
+    // Madde 8.2: tür ÇIKARSANMAZ, frontmatter'dan OKUNUR.
+    let kind = NoteKind::from_frontmatter(
+        frontmatter::string_field(&fm, "arkeles_type").as_deref(),
+    );
+
     Some(ParsedNote {
         id: note_id,
         managed,
         title: derive_title(&fm, body, path),
-        workspace: derive_workspace(&fm, &source_path),
+        workspace: derive_workspace(&fm),
+        kind,
+        event_date: frontmatter::string_field(&fm, "date"),
         tasks: tasks::parse(body, line_offset),
         links: links::parse(body),
         body: body.to_string(),
@@ -133,24 +189,20 @@ fn derive_title(
         .unwrap_or_else(|| "Adsız".to_string())
 }
 
-/// Çalışma alanı (madde 36.3): frontmatter `workspace` → en üst klasör adı.
-fn derive_workspace(
-    fm: &serde_json::Map<String, serde_json::Value>,
-    source_path: &str,
-) -> Option<String> {
-    if let Some(w) = frontmatter::string_field(fm, "workspace") {
-        return Some(w);
-    }
-    // "İş/WIF/notlar/a.md" → "İş" değil "WIF" daha anlamlı olurdu ama
-    // klasör düzenini VARSAYMAK yanlış olur (madde 6.3: şüphede eklemeyiz).
-    // Bu yüzden yalnız TEK seviyeli yerleşimde ilk klasörü alırız.
-    let mut parts = source_path.split('/');
-    let first = parts.next()?;
-    if parts.next().is_some() {
-        Some(first.to_string())
-    } else {
-        None // kökteki notun çalışma alanı yoktur
-    }
+/*
+ * Çalışma alanı (madde 36.3) — YALNIZ frontmatter `workspace` alanından.
+ *
+ * SPRINT 3'TE DEĞİŞTİ: Sprint 1'de klasör adına da bakılıyordu. O davranış
+ * kaldırıldı çünkü klasör düzenini VARSAYMAK yanlış eşleştirme üretiyordu:
+ * "Arşiv/WIF eski" klasöründeki bir not WIF'e düşerdi. Sprint 3 test
+ * gereksinimi bunu açıkça yasaklıyor ("workspace alanı olmayan not yanlış
+ * kuruma düşmüyor").
+ *
+ * Değer tanınmıyorsa `None` — çalışma alanı yokmuş gibi davranır.
+ */
+fn derive_workspace(fm: &serde_json::Map<String, serde_json::Value>) -> Option<String> {
+    let raw = frontmatter::string_field(fm, "workspace")?;
+    crate::config::workspaces::resolve(&raw).map(str::to_string)
 }
 
 fn relative_path(vault_root: &Path, path: &Path) -> String {

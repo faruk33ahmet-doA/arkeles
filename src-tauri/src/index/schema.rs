@@ -22,7 +22,7 @@ use rusqlite::Connection;
 use crate::error::{CoreError, CoreResult};
 
 /// Anayasa madde 15.5. Bu sayı artınca index sıfırlanır ve yeniden kurulur.
-pub const SCHEMA_VERSION: i64 = 2;
+pub const SCHEMA_VERSION: i64 = 3;
 
 /// Şemayı uygular. Sürüm uyuşmazsa her şeyi silip yeniden kurar.
 pub fn apply(conn: &Connection) -> CoreResult<()> {
@@ -46,6 +46,7 @@ pub fn apply(conn: &Connection) -> CoreResult<()> {
 }
 
 const DROP_ALL: &str = r#"
+DROP TABLE IF EXISTS documents;
 DROP TABLE IF EXISTS index_meta;
 DROP TABLE IF EXISTS notes_fts;
 DROP TABLE IF EXISTS tasks;
@@ -71,11 +72,20 @@ CREATE TABLE notes (
     content_hash  TEXT NOT NULL,
     modified_at   TEXT NOT NULL,
     created_at    TEXT,
-    frontmatter   TEXT
+    frontmatter   TEXT,
+    -- Madde 36.3: kanonik çalışma alanı kimliği. YALNIZ frontmatter'dan
+    -- çözümlenir; tanınmayan değer NULL kalır (yanlış kuruma düşmez).
+    workspace     TEXT,
+    -- Madde 8.2: tür frontmatter'dan OKUNUR, çıkarsanmaz.
+    kind          TEXT NOT NULL DEFAULT 'note',
+    -- Toplantı tarihi; yalnız kind='meeting' için anlamlı.
+    event_date    TEXT
 ) STRICT;
 
-CREATE INDEX idx_notes_modified ON notes(modified_at DESC);
-CREATE INDEX idx_notes_managed  ON notes(managed);
+CREATE INDEX idx_notes_modified  ON notes(modified_at DESC);
+CREATE INDEX idx_notes_managed   ON notes(managed);
+CREATE INDEX idx_notes_workspace ON notes(workspace) WHERE workspace IS NOT NULL;
+CREATE INDEX idx_notes_kind      ON notes(kind);
 
 -- ---------------------------------------------------------------------------
 -- tasks — notların içindeki `- [ ]` satırları.
@@ -95,9 +105,10 @@ CREATE TABLE tasks (
     FOREIGN KEY (note_id) REFERENCES notes(id) ON DELETE CASCADE
 ) STRICT;
 
-CREATE INDEX idx_tasks_due    ON tasks(due) WHERE due IS NOT NULL;
-CREATE INDEX idx_tasks_status ON tasks(status);
-CREATE INDEX idx_tasks_note   ON tasks(note_id);
+CREATE INDEX idx_tasks_due       ON tasks(due) WHERE due IS NOT NULL;
+CREATE INDEX idx_tasks_status    ON tasks(status);
+CREATE INDEX idx_tasks_note      ON tasks(note_id);
+CREATE INDEX idx_tasks_workspace ON tasks(workspace) WHERE workspace IS NOT NULL;
 
 -- ---------------------------------------------------------------------------
 -- links — notlar arası [[wiki]] bağlantıları.
@@ -130,4 +141,27 @@ CREATE TABLE index_meta (
     key   TEXT PRIMARY KEY,
     value TEXT NOT NULL
 ) STRICT;
+
+-- ---------------------------------------------------------------------------
+-- documents — vault içindeki markdown OLMAYAN dosyalar (PDF, sunum, görsel).
+--
+-- Madde 7.2: bunlar Obsidian'ın parçasıdır, ARKELÉS onları ÜRETMEZ ve
+-- KOPYALAMAZ (Sprint 3 madde 8). Yalnız yol referansı tutulur; dosya
+-- açılması işletim sistemine devredilir.
+--
+-- Çalışma alanı: bu dosyaların frontmatter'ı yoktur, bu yüzden ilişki
+-- KLASÖR üzerinden kurulamaz (yanlış eşleşme riski). Bunun yerine dosyaya
+-- BAĞLANAN notun çalışma alanı kullanılır — ilişki `links` üzerinden gelir.
+-- Bağlantısı olmayan dosya hiçbir kuruma düşmez.
+-- ---------------------------------------------------------------------------
+CREATE TABLE documents (
+    id           TEXT PRIMARY KEY,
+    source_path  TEXT NOT NULL UNIQUE,
+    file_name    TEXT NOT NULL,
+    extension    TEXT NOT NULL,
+    size_bytes   INTEGER NOT NULL,
+    modified_at  TEXT NOT NULL
+) STRICT;
+
+CREATE INDEX idx_documents_modified ON documents(modified_at DESC);
 "#;

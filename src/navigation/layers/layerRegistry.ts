@@ -27,8 +27,8 @@ export const LAYERS: Record<LayerId, LayerDefinition> = {
     id: "work",
     title: "İş",
     level: 1,
-    status: "placeholder",
-    component: () => import("@/modules/_placeholder/PlaceholderLayer"),
+    status: "live",
+    component: () => import("@/modules/work/WorkLayer"),
   },
   personal: {
     id: "personal",

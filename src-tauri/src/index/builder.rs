@@ -45,12 +45,12 @@ pub fn full_scan(conn: &mut Connection, vault_root: &Path) -> CoreResult<ScanRep
     let mut report = ScanReport::default();
 
     let existing = load_hashes(conn)?;
-    let files = reader::collect_markdown_files(vault_root);
+    let files = reader::collect_files(vault_root);
 
     let tx = conn.transaction().map_err(CoreError::IndexQuery)?;
-    let mut seen_paths: Vec<String> = Vec::with_capacity(files.len());
+    let mut seen_paths: Vec<String> = Vec::with_capacity(files.markdown.len());
 
-    for path in &files {
+    for path in &files.markdown {
         report.scanned += 1;
 
         let Some(note) = reader::read_note(vault_root, path) else {
@@ -73,6 +73,9 @@ pub fn full_scan(conn: &mut Connection, vault_root: &Path) -> CoreResult<ScanRep
     }
 
     report.removed = remove_missing(&tx, &seen_paths)?;
+
+    // Belgeler: içerik OKUNMAZ, yalnız yol/boyut/tarih (madde 7.2).
+    sync_documents(&tx, vault_root, &files.documents)?;
 
     set_meta(&tx, "indexed_at", &time::now_iso())?;
     set_meta(&tx, "note_count", &seen_paths.len().to_string())?;
@@ -159,8 +162,9 @@ fn upsert_note(tx: &Transaction<'_>, note: &ParsedNote) -> CoreResult<()> {
         .map(str::to_string);
 
     tx.execute(
-        "INSERT INTO notes (id, source_path, title, managed, content_hash, modified_at, created_at, frontmatter)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
+        "INSERT INTO notes (id, source_path, title, managed, content_hash, modified_at,
+                            created_at, frontmatter, workspace, kind, event_date)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)
          ON CONFLICT(id) DO UPDATE SET
             source_path = excluded.source_path,
             title = excluded.title,
@@ -168,7 +172,10 @@ fn upsert_note(tx: &Transaction<'_>, note: &ParsedNote) -> CoreResult<()> {
             content_hash = excluded.content_hash,
             modified_at = excluded.modified_at,
             created_at = excluded.created_at,
-            frontmatter = excluded.frontmatter",
+            frontmatter = excluded.frontmatter,
+            workspace = excluded.workspace,
+            kind = excluded.kind,
+            event_date = excluded.event_date",
         params![
             note.id,
             note.source_path,
@@ -178,6 +185,9 @@ fn upsert_note(tx: &Transaction<'_>, note: &ParsedNote) -> CoreResult<()> {
             note.modified_at,
             created_at,
             frontmatter,
+            note.workspace,
+            note.kind.as_str(),
+            note.event_date,
         ],
     )
     .map_err(CoreError::IndexQuery)?;
@@ -286,6 +296,46 @@ fn remove_missing(tx: &Transaction<'_>, seen_paths: &[String]) -> CoreResult<usi
         }
     }
     Ok(removed)
+}
+
+/*
+ * Belgeleri senkronize eder — Anayasa madde 7.2, Sprint 3 madde 8.
+ *
+ * İçerik OKUNMAZ, kopyalanmaz, dönüştürülmez. Yalnız dosyanın var olduğu,
+ * adı, boyutu ve değişme zamanı kaydedilir. ARKELÉS belge üretmez (madde 7.3).
+ */
+fn sync_documents(
+    tx: &Transaction<'_>,
+    vault_root: &std::path::Path,
+    paths: &[std::path::PathBuf],
+) -> CoreResult<()> {
+    tx.execute("DELETE FROM documents", [])
+        .map_err(CoreError::IndexQuery)?;
+
+    for path in paths {
+        let Some(info) = reader::read_document(vault_root, path) else {
+            continue;
+        };
+        // Kimlik yoldan türetilir: belgenin frontmatter'ı yoktur, ULID taşıyamaz.
+        let id = crate::vault::id::transient_id(&info.source_path);
+
+        tx.execute(
+            "INSERT OR REPLACE INTO documents
+             (id, source_path, file_name, extension, size_bytes, modified_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            params![
+                id,
+                info.source_path,
+                info.file_name,
+                info.extension,
+                info.size_bytes as i64,
+                info.modified_at,
+            ],
+        )
+        .map_err(CoreError::IndexQuery)?;
+    }
+
+    Ok(())
 }
 
 fn set_meta(tx: &Transaction<'_>, key: &str, value: &str) -> CoreResult<()> {

@@ -57,7 +57,10 @@ pub fn parse(body: &str, line_offset: u32) -> Vec<ParsedTask> {
     tasks
 }
 
-/// `- [ ] ...` başlangıcını tanır, (durum, kalan metin) döner.
+/// `- [?] ...` başlangıcını tanır, (durum, kalan metin) döner.
+///
+/// Tanınmayan işaret (`[!]` gibi kişisel notasyonlar) görev SAYILMAZ:
+/// yanlış gruba düşmesindense hiç görünmemesi doğrudur (madde 6.3).
 fn match_checkbox(trimmed: &str) -> Option<(TaskStatus, &str)> {
     let after_bullet = trimmed
         .strip_prefix("- ")
@@ -65,17 +68,16 @@ fn match_checkbox(trimmed: &str) -> Option<(TaskStatus, &str)> {
         .or_else(|| trimmed.strip_prefix("+ "))?;
 
     let after_bullet = after_bullet.trim_start();
+    let bytes = after_bullet.as_bytes();
 
-    if let Some(rest) = after_bullet.strip_prefix("[ ]") {
-        return Some((TaskStatus::Open, rest));
+    // `[` + tek karakter + `]`
+    if bytes.first() != Some(&b'[') || bytes.get(2) != Some(&b']') {
+        return None;
     }
-    if let Some(rest) = after_bullet.strip_prefix("[x]") {
-        return Some((TaskStatus::Done, rest));
-    }
-    if let Some(rest) = after_bullet.strip_prefix("[X]") {
-        return Some((TaskStatus::Done, rest));
-    }
-    None
+    let marker = *bytes.get(1)? as char;
+    let status = TaskStatus::from_marker(marker)?;
+
+    Some((status, &after_bullet[3..]))
 }
 
 /// Vade işaretlerini ve fazla boşluğu başlıktan temizler.

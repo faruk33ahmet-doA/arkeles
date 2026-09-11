@@ -8,6 +8,13 @@
  */
 
 export type { DashboardView } from "./DashboardView";
+export type { DocumentRef } from "./DocumentRef";
+export type { MeetingSummary } from "./MeetingSummary";
+export type { NoteDetail } from "./NoteDetail";
+export type { NoteLink } from "./NoteLink";
+export type { Workspace } from "./Workspace";
+export type { WorkspaceOverview } from "./WorkspaceOverview";
+
 export type { HermesHealth } from "./HermesHealth";
 export type { IndexStatus } from "./IndexStatus";
 export type { InboxStatus } from "./InboxStatus";

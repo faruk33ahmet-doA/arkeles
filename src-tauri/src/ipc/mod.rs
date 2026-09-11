@@ -11,5 +11,6 @@ frontend tarafındaki karşılıkları "GEÇİCİ: ts-rs Sprint 1" ile işaretli
 
 pub mod hermes_cmds;
 pub mod mutation_cmds;
+pub mod work_cmds;
 pub mod index_cmds;
 pub mod vault_cmds;

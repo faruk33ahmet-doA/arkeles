@@ -129,3 +129,103 @@ pub struct SearchHit {
     /// Eşleşen bağlam parçası. Madde 19.5: yalnız arayüze gider, log'a GİTMEZ.
     pub snippet: String,
 }
+
+// ===========================================================================
+// İŞ MODÜLÜ — Anayasa madde 36.3, Sprint 3
+// ===========================================================================
+
+/// Çalışma alanı tanımı — Anayasa madde 36.3.
+#[derive(Debug, Serialize, TS)]
+#[ts(export, export_to = "../../src/lib/generated/")]
+#[serde(rename_all = "camelCase")]
+pub struct Workspace {
+    pub id: String,
+    pub label: String,
+    /// Madde 36.2: gerçek veri yüzeyi var mı? Yoksa hazır/boş durum (26.4).
+    pub active: bool,
+    /// Madde 11.5: SAYIM. Analiz değil.
+    pub outstanding_tasks: u32,
+    pub note_count: u32,
+}
+
+/// Çalışma alanı genel bakışı — Sprint 3 madde 3.
+///
+/// Buradaki her alan MEVCUT VERİDEN üretilir. `priority` alanı HERMES
+/// tarafından vault'a yazılmışsa dolar; ARKELÉS öncelik ANALİZİ YAPMAZ
+/// (madde 8.2, 11.2). Yoksa `None` ve arayüz alanı GİZLER.
+#[derive(Debug, Serialize, TS)]
+#[ts(export, export_to = "../../src/lib/generated/")]
+#[serde(rename_all = "camelCase")]
+pub struct WorkspaceOverview {
+    pub workspace_id: String,
+    pub active_tasks: u32,
+    pub waiting_tasks: u32,
+    pub done_tasks: u32,
+    /// Bu çalışma alanındaki en son not değişikliği (ISO 8601).
+    pub last_activity: Option<String>,
+    /// Madde 11.1/11.2: Hermes yazdıysa gösterilir, yoksa gizlenir.
+    pub priority: Option<String>,
+    /// Son dokunulan notlar — kısa liste.
+    pub recent_notes: Vec<NoteSummary>,
+    /// Bugünden itibaren en yakın toplantı. Yoksa gizlenir.
+    pub next_meeting: Option<MeetingSummary>,
+}
+
+#[derive(Debug, Serialize, TS)]
+#[ts(export, export_to = "../../src/lib/generated/")]
+#[serde(rename_all = "camelCase")]
+pub struct MeetingSummary {
+    pub id: String,
+    pub title: String,
+    /// ISO 8601 tarih (`date` frontmatter'ı).
+    pub date: String,
+    pub workspace: Option<String>,
+}
+
+/// Belge — Anayasa madde 7.2. ARKELÉS onu ÜRETMEZ, yalnız işaret eder.
+#[derive(Debug, Serialize, TS)]
+#[ts(export, export_to = "../../src/lib/generated/")]
+#[serde(rename_all = "camelCase")]
+pub struct DocumentRef {
+    pub id: String,
+    /// Vault köküne göre yol. Açma işi işletim sistemine devredilir.
+    pub source_path: String,
+    pub file_name: String,
+    pub extension: String,
+    pub size_bytes: u32,
+    pub modified_at: String,
+}
+
+/// Not detayı — Sprint 3 madde 10. ARKELÉS metin editörü DEĞİLDİR.
+#[derive(Debug, Serialize, TS)]
+#[ts(export, export_to = "../../src/lib/generated/")]
+#[serde(rename_all = "camelCase")]
+pub struct NoteDetail {
+    pub id: String,
+    pub title: String,
+    pub source_path: String,
+    /// Madde 16.3: `false` ise mekanik mutasyon UYGULANMAZ.
+    pub managed: bool,
+    pub workspace: Option<String>,
+    pub kind: String,
+    pub modified_at: String,
+    /// Frontmatter, JSON nesnesi olarak. Mekanik kontroller bunu okur.
+    pub frontmatter: String,
+    /// Gövde — OKUNUR, DÜZENLENMEZ (madde 8.4).
+    pub body: String,
+    pub tasks: Vec<Task>,
+    /// Bu nottan çıkan bağlantılar.
+    pub outgoing: Vec<NoteLink>,
+    /// Bu nota gelen bağlantılar.
+    pub incoming: Vec<NoteLink>,
+}
+
+/// Bir bağlantı ucu. Hedef index'te yoksa `noteId` boştur — bağlantı
+/// yine GÖSTERİLİR, çünkü Obsidian'da kırık bağlantı da bir bilgidir.
+#[derive(Debug, Serialize, TS)]
+#[ts(export, export_to = "../../src/lib/generated/")]
+#[serde(rename_all = "camelCase")]
+pub struct NoteLink {
+    pub note_id: Option<String>,
+    pub title: String,
+}

@@ -12,9 +12,12 @@ mod builder;
 mod db;
 mod query;
 mod schema;
+mod work;
 
 #[cfg(test)]
 mod query_test;
+#[cfg(test)]
+mod work_test;
 
 pub use builder::ScanReport;
 pub use query::WriteTarget;

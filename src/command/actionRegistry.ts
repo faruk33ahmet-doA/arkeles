@@ -1,4 +1,6 @@
 import type { LayerId } from "@/navigation/layers/types";
+import type { WorkPanel } from "@/state/workStore";
+import type { Workspace } from "@/lib/generated";
 import { listLayers } from "@/navigation/layers/layerRegistry";
 
 /*
@@ -42,6 +44,8 @@ export interface ActionContext {
   closePalette: () => void;
   /** Hızlı Yakalama panelini açar — madde 10.1. */
   openQuickCapture: () => void;
+  /** İş modülünde bir çalışma alanı ve panel açar — Sprint 3 madde 13. */
+  openWorkspace: (workspaceId: string, panel?: WorkPanel) => void;
 }
 
 /** Katmanlardan otomatik türeyen navigasyon aksiyonları (madde 27.4). */
@@ -57,6 +61,52 @@ function navigationActions(): Action[] {
       ctx.closePalette();
     },
   }));
+}
+
+/*
+ * Çalışma alanı aksiyonları — Sprint 3 madde 13.
+ *
+ * "Hardcode edilmiş paralel navigasyon sistemi oluşturma."
+ *
+ * Bu yüzden aksiyonlar çekirdekten gelen kurum LİSTESİNDEN türer; WIF ve
+ * GEN için elle yazılmış giriş YOKTUR. Yeni bir kurum aktifleşince
+ * aksiyonları kendiliğinden belirir.
+ *
+ * Yalnız AKTİF kurumlar için "görevlerini aç" aksiyonu üretilir — pasif
+ * kurumda o panel boş olurdu ve madde 18.2'yi ihlal ederdi.
+ */
+function workspaceActions(workspaces: Workspace[]): Action[] {
+  const actions: Action[] = [];
+
+  for (const ws of workspaces) {
+    actions.push({
+      id: `work:${ws.id}`,
+      title: `${ws.label}'e git`,
+      group: "İş",
+      kind: "navigate",
+      keywords: [ws.id, ws.label, "iş", "kurum", "çalışma alanı"],
+      run: (ctx) => {
+        ctx.openWorkspace(ws.id);
+        ctx.closePalette();
+      },
+    });
+
+    if (ws.active) {
+      actions.push({
+        id: `work:${ws.id}:tasks`,
+        title: `${ws.label} görevlerini aç`,
+        group: "İş",
+        kind: "navigate",
+        keywords: [ws.id, ws.label, "görev", "task"],
+        run: (ctx) => {
+          ctx.openWorkspace(ws.id, "tasks");
+          ctx.closePalette();
+        },
+      });
+    }
+  }
+
+  return actions;
 }
 
 /*
@@ -83,10 +133,17 @@ function quickCaptureAction(): Action {
  * `inboxAvailable`: madde 10.2 + 18.2 — gelen kutusu dosyası yoksa
  * Hızlı Yakalama listelenmez.
  */
-export function getActions(options: { inboxAvailable: boolean }): Action[] {
+export function getActions(options: {
+  inboxAvailable: boolean;
+  workspaces?: Workspace[];
+}): Action[] {
   const actions = [...navigationActions()];
+
   if (options.inboxAvailable) {
     actions.push(quickCaptureAction());
   }
+  // Sprint 3 madde 13: kurum aksiyonları listeden TÜRETİLİR, yazılmaz.
+  actions.push(...workspaceActions(options.workspaces ?? []));
+
   return actions;
 }

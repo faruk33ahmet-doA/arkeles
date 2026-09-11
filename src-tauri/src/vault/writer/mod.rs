@@ -260,10 +260,14 @@ fn rewrite_checkbox(line: &str, expected_title: &str, new_status: TaskStatus) ->
     let extra_len = after_bullet.len() - after_bullet.trim_start().len();
     let (extra, marker_and_rest) = after_bullet.split_at(extra_len);
 
-    let after_marker = marker_and_rest
-        .strip_prefix("[ ]")
-        .or_else(|| marker_and_rest.strip_prefix("[x]"))
-        .or_else(|| marker_and_rest.strip_prefix("[X]"))?;
+    // Herhangi bir GEÇERLİ görev işaretini kabul et — `[/]` olan bir görev
+    // de tamamlanabilmeli.
+    let bytes = marker_and_rest.as_bytes();
+    if bytes.first() != Some(&b'[') || bytes.get(2) != Some(&b']') {
+        return None;
+    }
+    TaskStatus::from_marker(*bytes.get(1)? as char)?;
+    let after_marker = &marker_and_rest[3..];
 
     // Hedef doğrulaması: başlık beklenenle eşleşmeli (parser ile aynı temizlik).
     let actual_title = crate::vault::tasks::title_from_rest(after_marker);
@@ -271,9 +275,17 @@ fn rewrite_checkbox(line: &str, expected_title: &str, new_status: TaskStatus) ->
         return None;
     }
 
+    /*
+     * Checkbox yalnız iki yöne çevirir: açık ↔ bitmiş.
+     *
+     * `[/]` (sürüyor) veya `[>]` (bekliyor) bir görevi işaretlemek onu
+     * `[x]` yapar; kaldırmak `[ ]` yapar. Ara durumu KORUMAYA çalışmak
+     * kullanıcının ne istediğini varsaymak olurdu (madde 6.3) — bir
+     * checkbox'ın anlamı budur. Ara durumları Obsidian'da düzenler.
+     */
     let new_marker = match new_status {
-        TaskStatus::Open => "[ ]",
         TaskStatus::Done => "[x]",
+        _ => "[ ]",
     };
 
     Some(format!("{bom}{indent}{bullet}{extra}{new_marker}{after_marker}"))

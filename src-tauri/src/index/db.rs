@@ -21,7 +21,7 @@ use rusqlite::Connection;
 use tauri::{AppHandle, Manager};
 
 use crate::error::{CoreError, CoreResult};
-use crate::index::{builder, query, schema, ScanReport};
+use crate::index::{builder, query, schema, work, ScanReport};
 use crate::types::{DashboardView, IndexStatus, SearchHit, TodayView, VaultStatus};
 
 const INDEX_FILE: &str = "index.sqlite3";
@@ -208,6 +208,78 @@ impl IndexHandle {
             .query_row(
                 "SELECT id FROM notes WHERE source_path = ?1",
                 rusqlite::params![source_path],
+                |row| row.get::<_, String>(0),
+            )
+            .ok()
+    }
+}
+
+/*
+ * İş modülü okuma yolu — Sprint 3.
+ *
+ * Hepsi OKUMA bağlantısını kullanır: tarama sürerken de cevap verirler
+ * (Sprint 1 borcu #1).
+ */
+impl IndexHandle {
+    pub fn workspaces(&self) -> CoreResult<Vec<crate::types::Workspace>> {
+        work::list_workspaces(&self.reader())
+    }
+
+    pub fn workspace_overview(
+        &self,
+        id: &str,
+    ) -> CoreResult<crate::types::WorkspaceOverview> {
+        let (view, errors) = work::overview(&self.reader(), id)?;
+        self.count_row_errors(errors);
+        Ok(view)
+    }
+
+    pub fn workspace_tasks(&self, id: &str) -> CoreResult<Vec<crate::types::Task>> {
+        let (rows, errors) = work::tasks(&self.reader(), id)?;
+        self.count_row_errors(errors);
+        Ok(rows)
+    }
+
+    pub fn workspace_notes(
+        &self,
+        id: &str,
+        kind: &str,
+    ) -> CoreResult<Vec<crate::types::NoteSummary>> {
+        let (rows, errors) = work::notes(&self.reader(), id, kind)?;
+        self.count_row_errors(errors);
+        Ok(rows)
+    }
+
+    pub fn workspace_meetings(
+        &self,
+        id: &str,
+    ) -> CoreResult<Vec<crate::types::MeetingSummary>> {
+        let (rows, errors) = work::meetings(&self.reader(), id)?;
+        self.count_row_errors(errors);
+        Ok(rows)
+    }
+
+    pub fn workspace_documents(
+        &self,
+        id: &str,
+    ) -> CoreResult<Vec<crate::types::DocumentRef>> {
+        let (rows, errors) = work::documents(&self.reader(), id)?;
+        self.count_row_errors(errors);
+        Ok(rows)
+    }
+
+    pub fn note_detail(&self, note_id: &str) -> CoreResult<crate::types::NoteDetail> {
+        work::note_detail(&self.reader(), note_id)
+    }
+}
+
+impl IndexHandle {
+    /// Belge yolunu index'ten çözer. Arayüzden gelen yola GÜVENİLMEZ (madde 19).
+    pub fn document_path(&self, document_id: &str) -> Option<String> {
+        self.reader()
+            .query_row(
+                "SELECT source_path FROM documents WHERE id = ?1",
+                rusqlite::params![document_id],
                 |row| row.get::<_, String>(0),
             )
             .ok()

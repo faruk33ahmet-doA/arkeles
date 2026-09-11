@@ -36,7 +36,7 @@ use crate::vault::time;
  */
 
 /// Satır dönüşümü başarısız olduğunda: logla, say, atla.
-fn collect_rows<T>(
+pub(crate) fn collect_rows<T>(
     rows: impl Iterator<Item = rusqlite::Result<T>>,
     table: &str,
 ) -> (Vec<T>, u64) {

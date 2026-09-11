@@ -6,6 +6,8 @@ Uygulama yapılandırması — Anayasa madde 17.
 17.3  Vault yolu HİÇBİR YERDE SABİT KODLANMAZ. İlk açılışta sorulur.
 */
 
+pub mod workspaces;
+
 use std::path::{Path, PathBuf};
 use std::sync::RwLock;
 

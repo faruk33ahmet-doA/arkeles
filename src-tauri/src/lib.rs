@@ -64,6 +64,7 @@ impl AppState {
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_opener::init())
         .setup(|app| {
             // Anayasa madde 17.3: vault yolu SABİT KODLANMAZ.
             let config = config::Config::load(app.handle())?;
@@ -128,6 +129,15 @@ pub fn run() {
             ipc::mutation_cmds::toggle_tag,
             ipc::mutation_cmds::quick_capture,
             ipc::mutation_cmds::inbox_status,
+            // İş modülü — Sprint 3. Kuruma özel komut YOK.
+            ipc::work_cmds::list_workspaces,
+            ipc::work_cmds::workspace_overview,
+            ipc::work_cmds::workspace_tasks,
+            ipc::work_cmds::workspace_notes,
+            ipc::work_cmds::workspace_meetings,
+            ipc::work_cmds::workspace_documents,
+            ipc::work_cmds::note_detail,
+            ipc::work_cmds::open_document,
         ])
         .run(tauri::generate_context!())
         .expect("ARKELÉS başlatılamadı");

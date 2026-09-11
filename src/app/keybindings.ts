@@ -1,32 +1,47 @@
 import { useEffect } from "react";
 import { useNavigationStore } from "@/state/navigationStore";
 import { useCommandStore } from "@/state/commandStore";
+import { useWorkStore } from "@/state/workStore";
 
 /*
  * Global klavye bağlantıları — Anayasa madde 22.8, 27.5.
  *
  * 22.8  "Her gezinme klavyeyle geri alınabilir (Esc)."
- * 27.5  "Fareyle yapılabilen her ana işlem klavyeyle de yapılabilir."
  *
- * Cmd+K burada DEĞİL, useCommandPalette.ts'te — palet kendi kısayolunun
- * sahibi. Bu dosya navigasyon kısayollarından sorumlu.
+ * SPRINT 3: Esc artık DERİNDEN YÜZEYE doğru tek adım geri alır:
+ *   not detayı → çalışma alanı → kurum listesi → katman (zoom out)
+ *
+ * Her basış TEK seviye geri gider; kullanıcı nerede olduğunu kaybetmez.
  */
 
 export function useGlobalKeybindings(): void {
   const zoomOut = useNavigationStore((s) => s.zoomOut);
   const paletteOpen = useCommandStore((s) => s.open);
+  const noteId = useWorkStore((s) => s.noteId);
+  const workspaceId = useWorkStore((s) => s.workspaceId);
+  const closeNote = useWorkStore((s) => s.closeNote);
+  const closeWorkspace = useWorkStore((s) => s.closeWorkspace);
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
       // Palet açıkken Esc paleti kapatır (Radix yapar) — navigasyona karışmaz.
       if (paletteOpen) return;
+      if (event.key !== "Escape") return;
 
-      if (event.key === "Escape") {
-        event.preventDefault();
-        zoomOut();
+      event.preventDefault();
+
+      if (noteId) {
+        closeNote();
+        return;
       }
+      if (workspaceId) {
+        closeWorkspace();
+        return;
+      }
+      zoomOut();
     }
+
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [zoomOut, paletteOpen]);
+  }, [zoomOut, paletteOpen, noteId, workspaceId, closeNote, closeWorkspace]);
 }
