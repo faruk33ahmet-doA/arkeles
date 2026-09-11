@@ -48,6 +48,11 @@ where
         };
         let expected = format!("token={token}");
         let check = move |request: &Request, response: Response| {
+            assert_eq!(
+                request.headers().get("user-agent").and_then(|value| value.to_str().ok()),
+                Some(crate::hermes::contract::USER_AGENT),
+                "ARKELÉS WebSocket istemci kimliği eksik",
+            );
             if request.uri().query() == Some(expected.as_str()) {
                 Ok(response)
             } else {

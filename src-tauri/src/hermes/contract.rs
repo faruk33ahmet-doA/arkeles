@@ -33,6 +33,13 @@ pub const DEFAULT_PORT: u16 = 9119;
 /// Hermes'in beklediği kimlik başlığı.
 pub const SESSION_HEADER: &str = "X-Hermes-Session-Token";
 
+/// Hermes logları ve taşıma düzeyi gözlemleri için ayırt edilebilir istemci adı.
+///
+/// HTTP başlıkları ASCII olmak zorunda olduğu için ürün adının aksansız biçimi
+/// kullanılır. Sürüm derleme paketinden gelir; arayüz veya kullanıcı girdisi
+/// bu değeri değiştiremez.
+pub const USER_AGENT: &str = concat!("ARKELES/", env!("CARGO_PKG_VERSION"));
+
 /// Bağlantı ayarları. Ortam değişkenleriyle geçersiz kılınabilir.
 pub struct Endpoint {
     pub port: u16,
@@ -206,5 +213,11 @@ mod tests {
         assert!(prompt.contains("Çalışma alanı: wif"));
         assert!(prompt.ends_with("Haftalık bütçe"));
         assert_eq!(session_title(action, None), "ARKELÉS · Rapor oluştur");
+    }
+
+    #[test]
+    fn istemci_kimligi_sabit_ve_surumludur() {
+        assert_eq!(USER_AGENT, concat!("ARKELES/", env!("CARGO_PKG_VERSION")));
+        assert!(USER_AGENT.is_ascii());
     }
 }

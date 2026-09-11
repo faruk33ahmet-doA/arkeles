@@ -32,6 +32,8 @@ use std::time::{Duration, Instant};
 
 use serde_json::{json, Value};
 use tungstenite::handshake::{HandshakeError, HandshakeRole};
+use tungstenite::http::header::USER_AGENT;
+use tungstenite::http::HeaderValue;
 use tungstenite::protocol::CloseFrame;
 use tungstenite::{client::IntoClientRequest, Message, WebSocket};
 
@@ -75,9 +77,13 @@ impl Channel {
 
         // Token sorgu parametresinde: Hermes'in kendi istemcisi de böyle yapıyor.
         let url = format!("ws://127.0.0.1:{port}/api/ws?token={}", urlencode(token));
-        let request = url
+        let mut request = url
             .into_client_request()
             .map_err(|_| CoreError::HermesUnreachable)?;
+        request.headers_mut().insert(
+            USER_AGENT,
+            HeaderValue::from_static(contract::USER_AGENT),
+        );
 
         let (socket, _response) =
             tungstenite::client::client(request, stream).map_err(classify_handshake)?;

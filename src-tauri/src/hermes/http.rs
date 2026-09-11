@@ -26,6 +26,10 @@ const MAX_RESPONSE: u64 = 512 * 1024;
 /// `GET <path>` — başarısızlık `None`, hata DEĞİL (madde 18.4).
 pub fn get_json(path: &str) -> Option<serde_json::Value> {
     let endpoint = Endpoint::resolve();
+    get_json_at(&endpoint, path)
+}
+
+fn get_json_at(endpoint: &Endpoint, path: &str) -> Option<serde_json::Value> {
     let addr: SocketAddr = ([127, 0, 0, 1], endpoint.port).into();
 
     let mut stream = TcpStream::connect_timeout(&addr, TIMEOUT).ok()?;
@@ -38,8 +42,9 @@ pub fn get_json(path: &str) -> Option<serde_json::Value> {
      * çekirdekten geliyor.
      */
     let mut request = format!(
-        "GET {path} HTTP/1.1\r\nHost: {}\r\nAccept: application/json\r\nConnection: close\r\n",
-        endpoint.http_authority()
+        "GET {path} HTTP/1.1\r\nHost: {}\r\nUser-Agent: {}\r\nAccept: application/json\r\nConnection: close\r\n",
+        endpoint.http_authority(),
+        contract::USER_AGENT,
     );
     if let Some(token) = contract::read_token() {
         request.push_str(&format!("{}: {token}\r\n", contract::SESSION_HEADER));
@@ -133,5 +138,33 @@ mod tests {
     #[test]
     fn cok_buyuk_govde_siniri_sabit() {
         assert_eq!(MAX_RESPONSE, 512 * 1024);
+    }
+
+    #[test]
+    fn http_istegi_arkeles_kimligini_tasir() {
+        use std::net::TcpListener;
+
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let server = std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            stream.set_read_timeout(Some(Duration::from_secs(2))).unwrap();
+            let mut bytes = [0_u8; 4096];
+            let count = stream.read(&mut bytes).unwrap();
+            let request = String::from_utf8_lossy(&bytes[..count]);
+            assert!(request.contains(&format!(
+                "\r\nUser-Agent: {}\r\n",
+                contract::USER_AGENT,
+            )));
+            stream
+                .write_all(
+                    b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 11\r\nConnection: close\r\n\r\n{\"ok\":true}",
+                )
+                .unwrap();
+        });
+
+        let value = get_json_at(&Endpoint { port }, "/api/health").unwrap();
+        assert_eq!(value["ok"], serde_json::json!(true));
+        server.join().unwrap();
     }
 }
