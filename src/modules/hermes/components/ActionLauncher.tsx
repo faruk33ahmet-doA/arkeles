@@ -51,10 +51,21 @@ export function ActionLauncher({ workspace }: ActionLauncherProps) {
   const send = () => {
     const input = text.trim();
     if (!input || !openAction || submit.isPending) return;
-    submit.mutate({ action: openAction, workspace, input });
-    // Madde 6: Hermes cevabı BEKLENMEZ — yüzey hemen kapanır.
-    setText("");
-    setOpenAction(null);
+    submit.reset();
+    submit.mutate(
+      { action: openAction, workspace, input },
+      {
+        onSuccess: () => {
+          /*
+           * Yalnız yerel iş defterine başarıyla girdikten sonra kapanır.
+           * Hermes'in işi bitirmesi BEKLENMEZ; yalnız kuyruğa alma IPC'si
+           * beklenir. Hata olursa kullanıcının metni yerinde kalır.
+           */
+          setText("");
+          setOpenAction(null);
+        },
+      },
+    );
   };
 
   if (!openAction) {
@@ -90,7 +101,10 @@ export function ActionLauncher({ workspace }: ActionLauncherProps) {
       <textarea
         autoFocus
         value={text}
-        onChange={(event) => setText(event.target.value)}
+        onChange={(event) => {
+          setText(event.target.value);
+          if (submit.isError) submit.reset();
+        }}
         onKeyDown={(event) => {
           if (event.key === "Enter" && !event.shiftKey) {
             event.preventDefault();
@@ -110,6 +124,12 @@ export function ActionLauncher({ workspace }: ActionLauncherProps) {
         )}
       />
 
+      {submit.isError ? (
+        <p role="status" className="text-sm text-status-attention">
+          İş kuyruğa alınamadı. Metnin duruyor; tekrar deneyebilirsin.
+        </p>
+      ) : null}
+
       <div className="flex items-center justify-between gap-4">
         <span className="text-xs text-text-tertiary">
           Gönderdiğinde beklemezsin; iş kuyrukta görünür.
@@ -128,10 +148,10 @@ export function ActionLauncher({ workspace }: ActionLauncherProps) {
           <button
             type="button"
             onClick={send}
-            disabled={!text.trim()}
+            disabled={!text.trim() || submit.isPending}
             className={cn(secondaryButton, "text-text-primary")}
           >
-            Gönder
+            {submit.isPending ? "Kuyruğa alınıyor…" : "Gönder"}
           </button>
         </div>
       </div>

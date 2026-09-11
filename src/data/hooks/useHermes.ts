@@ -12,6 +12,7 @@ import {
 } from "@/services/hermes.service";
 import { isTauri } from "@/services/ipc";
 import { queryKeys, VAULT_DEPENDENT_KEYS } from "@/data/queryKeys";
+import { createOptimisticJob, removeOptimisticJob } from "@/data/hermesOptimistic";
 import { startInteraction } from "@/lib/perf";
 import type { Job } from "@/lib/generated";
 
@@ -134,39 +135,29 @@ export function useSubmitJob() {
       const close = startInteraction();
       await queryClient.cancelQueries({ queryKey: queryKeys.hermes.activeJobs });
 
-      const previous = queryClient.getQueryData<Job[]>(queryKeys.hermes.activeJobs);
-
       // Geçici kayıt: gerçek kimlik çekirdekten gelene kadar.
-      const optimistic: Job = {
-        id: `pending-${Date.now()}`,
+      const optimistic = createOptimisticJob({
+        id: `pending-${crypto.randomUUID()}`,
         action: vars.action,
-        actionLabel: vars.action,
         workspace: vars.workspace,
-        summary: vars.input.slice(0, 120),
-        status: "queued",
+        input: vars.input,
         createdAt: new Date().toISOString(),
-        startedAt: null,
-        finishedAt: null,
-        // Madde 7: sahte progress YOK.
-        progress: null,
-        errorCode: null,
-        errorMessage: null,
-        source: "arkeles",
-      };
+      });
 
-      queryClient.setQueryData<Job[]>(queryKeys.hermes.activeJobs, [
+      queryClient.setQueryData<Job[]>(queryKeys.hermes.activeJobs, (current) => [
         optimistic,
-        ...(previous ?? []),
+        ...(current ?? []),
       ]);
 
       close();
-      return { previous };
+      return { optimisticId: optimistic.id };
     },
 
     onError: (_error, _vars, context) => {
-      if (context?.previous) {
-        queryClient.setQueryData(queryKeys.hermes.activeJobs, context.previous);
-      }
+      if (!context) return;
+      queryClient.setQueryData<Job[]>(queryKeys.hermes.activeJobs, (current) =>
+        removeOptimisticJob(current, context.optimisticId),
+      );
     },
 
     // Gerçek kayıt geldiğinde geçici olanı değiştir.
