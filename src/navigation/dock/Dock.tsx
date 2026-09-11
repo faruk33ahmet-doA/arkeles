@@ -30,7 +30,7 @@ export function Dock() {
     >
       <div
         className={cn(
-          "flex items-center gap-1 rounded-lg border border-glass-border px-2 py-2",
+          "flex items-center gap-1 rounded-md border border-glass-border px-2 py-2",
           "bg-glass-bg shadow-2 backdrop-blur-glass",
         )}
       >
@@ -43,11 +43,11 @@ export function Dock() {
               onClick={() => enterLayer(item.id)}
               aria-current={isActive ? "page" : undefined}
               className={cn(
-                "rounded-sm px-3 py-2 text-sm font-medium transition-colors duration-fast ease-out",
+                "rounded-sm border px-3 py-2 text-sm font-medium transition-colors duration-fast ease-out",
                 "outline-none focus-visible:ring-1 focus-visible:ring-border-strong",
                 isActive
-                  ? "bg-accent-muted text-text-primary"
-                  : "text-text-secondary hover:text-text-primary",
+                  ? "border-dashboard-rule bg-accent-muted text-accent"
+                  : "border-transparent text-text-secondary hover:border-border-subtle hover:bg-surface-3 hover:text-text-primary",
                 item.status === "placeholder" && !isActive && "text-text-tertiary",
               )}
             >

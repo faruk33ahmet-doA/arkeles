@@ -123,9 +123,7 @@ export function CommandPalette() {
     }).filter((action) => {
       if (action.kind !== "semantic") return true;
       if (!action.capability) return false;
-      return (
-        hermes?.reachable === true && hermes.capabilities.includes(action.capability)
-      );
+      return hermes?.reachable === true && hermes.capabilities.includes(action.capability);
     });
   }, [hermes, inbox, workspaces, hermesAvailable, taskSelected]);
 
@@ -146,6 +144,7 @@ export function CommandPalette() {
         {/* Overlay: sakin karartma, blur YOK (madde 30.1 — büyük yüzey) */}
         <DialogOverlay className="fixed inset-0 z-command bg-black/40" />
         <DialogContent
+          aria-describedby={undefined}
           className={cn(
             "fixed left-1/2 top-[20%] z-command w-full max-w-[520px] -translate-x-1/2",
             "overflow-hidden rounded-lg border border-glass-border",
@@ -160,89 +159,89 @@ export function CommandPalette() {
           {mode === "capture" ? (
             <QuickCapture inboxPath={inbox?.path ?? ""} onDone={close} />
           ) : (
-          <Command
-            // cmdk'nın kendi filtresi aksiyonlar için; not sonuçları
-            // çekirdekten FTS5 ile GELDİĞİ İÇİN yeniden filtrelenmemeli.
-            shouldFilter={false}
-            className="[&_[cmdk-input-wrapper]]:border-b [&_[cmdk-input-wrapper]]:border-border-subtle"
-          >
-            <CommandInput
-              value={query}
-              onValueChange={setQuery}
-              placeholder="Ara veya git…"
-              className={cn(
-                "w-full bg-transparent px-4 py-3 text-base text-text-primary",
-                "outline-none placeholder:text-text-tertiary",
-              )}
-            />
-            <CommandList className="max-h-[320px] overflow-y-auto p-2">
-              <CommandEmpty className="px-2 py-6 text-sm text-text-tertiary">
-                Eşleşen bir şey yok.
-              </CommandEmpty>
+            <Command
+              // cmdk'nın kendi filtresi aksiyonlar için; not sonuçları
+              // çekirdekten FTS5 ile GELDİĞİ İÇİN yeniden filtrelenmemeli.
+              shouldFilter={false}
+              className="[&_[cmdk-input-wrapper]]:border-b [&_[cmdk-input-wrapper]]:border-border-subtle"
+            >
+              <CommandInput
+                value={query}
+                onValueChange={setQuery}
+                placeholder="Ara veya git…"
+                className={cn(
+                  "w-full bg-transparent px-4 py-3 text-base text-text-primary",
+                  "outline-none placeholder:text-text-tertiary",
+                )}
+              />
+              <CommandList className="max-h-[320px] overflow-y-auto p-2">
+                <CommandEmpty className="px-2 py-6 text-sm text-text-tertiary">
+                  Eşleşen bir şey yok.
+                </CommandEmpty>
 
-              {/* Aksiyonlar — sorgu varsa isme göre süzülür. */}
-              {[...groups.entries()].map(([groupName, actions]) => {
-                const matching = filterActions(actions, query);
-                if (matching.length === 0) return null;
-                return (
-                  <CommandGroup
-                    key={groupName}
-                    heading={groupName}
-                    className={groupHeadingClass}
-                  >
-                    {matching.map((action) => (
-                      <CommandItem
-                        key={action.id}
-                        value={action.id}
-                        onSelect={() => action.run?.(ctx)}
-                        className={itemClass}
-                      >
-                        <span className="min-w-0 flex-1 truncate">{action.title}</span>
-                        {action.shortcut ? (
-                          <kbd className="ml-3 shrink-0 font-sans text-xs text-text-tertiary">
-                            {action.shortcut}
-                          </kbd>
-                        ) : null}
-                      </CommandItem>
-                    ))}
-                  </CommandGroup>
-                );
-              })}
-
-              {/* Not sonuçları — madde 27.4. Çalışma alanı olan not doğru İş yüzeyinde açılır. */}
-              {hits && hits.length > 0 ? (
-                <CommandGroup heading="Notlar" className={groupHeadingClass}>
-                  {hits.map((hit) => {
-                    const canOpen = hit.workspace !== null;
-                    return (
-                      <CommandItem
-                        key={hit.noteId}
-                        value={hit.noteId}
-                        disabled={!canOpen}
-                        onSelect={() => {
-                          if (!hit.workspace) return;
-                          openWorkspaceInStore(hit.workspace);
-                          openNoteInStore(hit.noteId);
-                          enterLayer("work");
-                          close();
-                        }}
-                        className={cn(itemClass, !canOpen && "cursor-default")}
-                      >
-                        <span className="flex min-w-0 flex-col gap-1">
-                          <span className="truncate text-text-primary">{hit.title}</span>
-                          {hit.snippet ? (
-                            <span className="truncate text-xs text-text-tertiary">
-                              {hit.snippet}
-                            </span>
+                {/* Aksiyonlar — sorgu varsa isme göre süzülür. */}
+                {[...groups.entries()].map(([groupName, actions]) => {
+                  const matching = filterActions(actions, query);
+                  if (matching.length === 0) return null;
+                  return (
+                    <CommandGroup
+                      key={groupName}
+                      heading={groupName}
+                      className={groupHeadingClass}
+                    >
+                      {matching.map((action) => (
+                        <CommandItem
+                          key={action.id}
+                          value={action.id}
+                          onSelect={() => action.run?.(ctx)}
+                          className={itemClass}
+                        >
+                          <span className="min-w-0 flex-1 truncate">{action.title}</span>
+                          {action.shortcut ? (
+                            <kbd className="ml-3 shrink-0 font-sans text-xs text-text-tertiary">
+                              {action.shortcut}
+                            </kbd>
                           ) : null}
-                        </span>
-                      </CommandItem>
-                    );
-                  })}
-                </CommandGroup>
-              ) : null}
-            </CommandList>
-          </Command>
+                        </CommandItem>
+                      ))}
+                    </CommandGroup>
+                  );
+                })}
+
+                {/* Not sonuçları — madde 27.4. Çalışma alanı olan not doğru İş yüzeyinde açılır. */}
+                {hits && hits.length > 0 ? (
+                  <CommandGroup heading="Notlar" className={groupHeadingClass}>
+                    {hits.map((hit) => {
+                      const canOpen = hit.workspace !== null;
+                      return (
+                        <CommandItem
+                          key={hit.noteId}
+                          value={hit.noteId}
+                          disabled={!canOpen}
+                          onSelect={() => {
+                            if (!hit.workspace) return;
+                            openWorkspaceInStore(hit.workspace);
+                            openNoteInStore(hit.noteId);
+                            enterLayer("work");
+                            close();
+                          }}
+                          className={cn(itemClass, !canOpen && "cursor-default")}
+                        >
+                          <span className="flex min-w-0 flex-col gap-1">
+                            <span className="truncate text-text-primary">{hit.title}</span>
+                            {hit.snippet ? (
+                              <span className="truncate text-xs text-text-tertiary">
+                                {hit.snippet}
+                              </span>
+                            ) : null}
+                          </span>
+                        </CommandItem>
+                      );
+                    })}
+                  </CommandGroup>
+                ) : null}
+              </CommandList>
+            </Command>
           )}
         </DialogContent>
       </DialogPortal>

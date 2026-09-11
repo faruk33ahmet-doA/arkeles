@@ -74,6 +74,14 @@ export default {
       glass: "var(--blur-glass)",
       "glass-strong": "var(--blur-glass-strong)",
     },
+    maxWidth: {
+      content: "var(--layout-content-max)",
+      dashboard: "var(--layout-dashboard-max)",
+    },
+    minHeight: {
+      "dashboard-critical": "var(--dashboard-critical-min)",
+      "dashboard-compact": "var(--dashboard-compact-min)",
+    },
     colors: {
       transparent: "transparent",
       current: "currentColor",
@@ -106,6 +114,13 @@ export default {
       glass: {
         bg: "var(--glass-bg)",
         border: "var(--glass-border)",
+      },
+      dashboard: {
+        panel: "var(--dashboard-panel)",
+        raised: "var(--dashboard-panel-raised)",
+        signal: "var(--dashboard-panel-signal)",
+        rule: "var(--dashboard-rule)",
+        muted: "var(--dashboard-signal-muted)",
       },
     },
     extend: {},

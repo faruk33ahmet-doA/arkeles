@@ -1,12 +1,14 @@
 import { useEffect } from "react";
 import { LayerHost } from "@/navigation/layers/LayerHost";
-import { Card } from "@/ui/Card";
 import { useDashboard } from "@/data/hooks/useDashboard";
-import { TaskGroup } from "@/modules/today/components/TaskGroup";
+import { useToday } from "@/data/hooks/useToday";
 import { LifeScoreCard } from "./components/LifeScoreCard";
 import { WorkspaceGrid } from "./components/WorkspaceGrid";
 import { SystemStatusCard } from "./components/SystemStatusCard";
 import { HermesCard } from "./components/HermesCard";
+import { DashboardHeader } from "./components/DashboardHeader";
+import { CriticalTasksCard } from "./components/CriticalTasksCard";
+import { TodaySummaryCard } from "./components/TodaySummaryCard";
 import { markFirstMeaningfulPaint } from "@/lib/perf";
 
 /*
@@ -20,6 +22,7 @@ import { markFirstMeaningfulPaint } from "@/lib/perf";
 
 export default function DashboardLayer() {
   const { data, isLoading } = useDashboard();
+  const { data: today, isLoading: todayLoading } = useToday();
 
   // Soğuk açılış ölçümü: panel gerçek veriyle boyandığı an (madde 34.1).
   useEffect(() => {
@@ -27,27 +30,21 @@ export default function DashboardLayer() {
   }, [data]);
 
   return (
-    <LayerHost>
-      <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
-        {/* Kritik görevler — en geniş alan, çünkü en sık okunan (madde 24.2) */}
-        <div className="md:col-span-2">
-          <Card title="Kritik">
-            <TaskGroup
-              tasks={data?.criticalTasks ?? []}
-              emptyMessage={isLoading ? "" : "Kritik bir şey yok. Gün sakin."}
-            />
-          </Card>
+    <LayerHost variant="dashboard">
+      <DashboardHeader />
+
+      <div className="grid grid-cols-1 gap-3 xl:grid-cols-12">
+        <div className="flex flex-col gap-3 xl:col-span-8">
+          <CriticalTasksCard tasks={data?.criticalTasks ?? []} loading={isLoading} />
+          <WorkspaceGrid workspaces={data?.workspaces ?? []} loading={isLoading} />
         </div>
 
-        <div className="flex flex-col gap-6">
+        <div className="grid grid-cols-2 content-start gap-3 xl:col-span-4">
+          <TodaySummaryCard today={today} loading={todayLoading} />
           <LifeScoreCard score={data?.lifeScore ?? null} loading={isLoading} />
           {/* Sprint 4 madde 4, 13: kısa Hermes özeti. Detay ayrı katmanda. */}
           <HermesCard />
           <SystemStatusCard />
-        </div>
-
-        <div className="md:col-span-3">
-          <WorkspaceGrid workspaces={data?.workspaces ?? []} loading={isLoading} />
         </div>
       </div>
     </LayerHost>

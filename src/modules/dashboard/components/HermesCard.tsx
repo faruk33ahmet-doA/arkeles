@@ -1,8 +1,7 @@
-import { Card } from "@/ui/Card";
 import { StatusDot } from "@/ui/StatusDot";
 import { useHermesSummary } from "@/data/hooks/useHermes";
 import { useZoom } from "@/navigation/zoom/useZoom";
-import { cn } from "@/lib/cn";
+import { DashboardCard, dashboardActionClass } from "./DashboardCard";
 
 /*
  * Dashboard Hermes özeti — Sprint 4 madde 4, 13.
@@ -28,25 +27,19 @@ export function HermesCard() {
   const hasActivity = running + queued + completed + failed > 0;
 
   return (
-    <Card
+    <DashboardCard
       title="Hermes"
       action={
-        hasActivity ? (
-          <button
-            type="button"
-            onClick={() => enterLayer("hermes")}
-            className={cn(
-              "rounded-sm px-1 text-xs text-text-tertiary",
-              "transition-colors duration-fast ease-out outline-none",
-              "hover:text-text-primary focus-visible:ring-1 focus-visible:ring-border-strong",
-            )}
-          >
-            tümü
-          </button>
-        ) : null
+        <button
+          type="button"
+          onClick={() => enterLayer("hermes")}
+          className={dashboardActionClass}
+        >
+          Aktivite
+        </button>
       }
     >
-      <div className="flex flex-col gap-3">
+      <div className="flex min-h-dashboard-compact flex-col justify-between gap-3">
         <StatusDot
           status={data?.reachable ? "online" : "offline"}
           label={
@@ -59,30 +52,30 @@ export function HermesCard() {
         />
 
         {/* Sayımlar — yalnız sıfırdan farklı olanlar. Sıfırı duyurmak gürültü. */}
-        {hasActivity ? (
-          <p className="pl-4 text-sm text-text-secondary">
-            {[
-              running > 0 ? `${running} iş çalışıyor` : null,
-              queued > 0 ? `${queued} bekliyor` : null,
-              completed > 0 ? `${completed} bugün tamamlandı` : null,
-            ]
-              .filter(Boolean)
-              .join(" · ")}
-          </p>
-        ) : null}
+        <div className="grid grid-cols-3 divide-x divide-border-subtle border-t border-border-subtle pt-3">
+          {[
+            ["aktif", running],
+            ["sırada", queued],
+            ["biten", completed],
+          ].map(([label, value]) => (
+            <span key={label} className="px-2 first:pl-0 last:pr-0">
+              <strong className="block text-base font-semibold tabular-nums text-text-primary">
+                {value}
+              </strong>
+              <span className="block text-xs text-text-tertiary">{label}</span>
+            </span>
+          ))}
+        </div>
 
         {/* Madde 15: başarısızlık görünür ama alarm değil. */}
         {failed > 0 ? (
           <StatusDot status="attention" label={`${failed} iş başarısız`} />
         ) : null}
 
-        {/* Son tamamlanan — TEK satır (madde 13). */}
-        {data?.lastCompleted ? (
-          <p className="truncate pl-4 text-xs text-text-tertiary">
-            Son: {data.lastCompleted.summary}
-          </p>
+        {!hasActivity ? (
+          <p className="text-xs text-text-tertiary">Bugün kayıtlı iş yok.</p>
         ) : null}
       </div>
-    </Card>
+    </DashboardCard>
   );
 }

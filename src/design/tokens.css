@@ -25,6 +25,12 @@
   --radius-md: 10px;
   --radius-lg: 16px;
 
+  /* ---- Yerleşim ---- */
+  --layout-content-max: 1120px;
+  --layout-dashboard-max: 1440px;
+  --dashboard-critical-min: 260px;
+  --dashboard-compact-min: 88px;
+
   /* ---- Tipografi rampası (madde 29) — SF Pro / system-ui, tek aile (madde 32) ---- */
   --font-family: -apple-system, "SF Pro Text", system-ui, sans-serif;
   --text-xs: 11px;
@@ -42,21 +48,21 @@
   --weight-semibold: 600;
 
   /* ---- Hareket (madde 23, 29) ---- */
-  --dur-fast: 120ms;   /* mikro tepki: hover, focus */
-  --dur-base: 200ms;   /* panel geçişi, açılır yüzey */
-  --dur-layer: 260ms;  /* katman zoom geçişi — üst sınır 300ms (madde 23.4) */
+  --dur-fast: 120ms; /* mikro tepki: hover, focus */
+  --dur-base: 200ms; /* panel geçişi, açılır yüzey */
+  --dur-layer: 260ms; /* katman zoom geçişi — üst sınır 300ms (madde 23.4) */
   --ease-out: cubic-bezier(0.32, 0.72, 0, 1);
   --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
 
   /* ---- z-index skalası — sıçrama yok, isimli katmanlar ---- */
   --z-base: 0;
-  --z-layer: 10;       /* modül katmanları */
-  --z-panel: 20;       /* alt panel geçişleri */
-  --z-drag: 25;        /* pencere sürükleme şeridi (madde 35.5) */
-  --z-trail: 30;       /* Zoom Trail breadcrumb */
-  --z-dock: 40;        /* Bottom Dock */
-  --z-command: 50;     /* Cmd+K komut paleti */
-  --z-conflict: 60;    /* yalnız veri kaybı riski bu seviyeyi kullanır (madde 25.4) */
+  --z-layer: 10; /* modül katmanları */
+  --z-panel: 20; /* alt panel geçişleri */
+  --z-drag: 25; /* pencere sürükleme şeridi (madde 35.5) */
+  --z-trail: 30; /* Zoom Trail breadcrumb */
+  --z-dock: 40; /* Bottom Dock */
+  --z-command: 50; /* Cmd+K komut paleti */
+  --z-conflict: 60; /* yalnız veri kaybı riski bu seviyeyi kullanır (madde 25.4) */
 
   /* ---- Blur / cam efekti (madde 30) ---- */
   /* Cam yalnız küçük yüzeylerde, asla animate edilmeden (madde 30.1, 30.2). */
@@ -78,32 +84,39 @@
   color-scheme: dark;
 
   /* Yüzey basamakları — derinlik renkle değil, aydınlık farkıyla kurulur (madde 28.2) */
-  --surface-0: #0b0b0d;   /* uygulama zemini */
-  --surface-1: #141416;   /* katman zemini */
-  --surface-2: #1c1c1f;   /* kart */
-  --surface-3: #26262a;   /* yükseltilmiş kart / hover */
+  --surface-0: #050806; /* uygulama zemini */
+  --surface-1: #080c09; /* katman zemini */
+  --surface-2: #0e1410; /* kart */
+  --surface-3: #151d17; /* yükseltilmiş kart / hover */
 
-  --glass-bg: rgba(20, 20, 22, 0.72);
-  --glass-border: rgba(255, 255, 255, 0.08);
+  --glass-bg: rgba(10, 15, 11, 0.82);
+  --glass-border: rgba(224, 244, 226, 0.08);
 
   /* Metin */
-  --text-primary: rgba(255, 255, 255, 0.92);
-  --text-secondary: rgba(255, 255, 255, 0.60);
-  --text-tertiary: rgba(255, 255, 255, 0.38);
-  --text-on-accent: #0b0b0d;
+  --text-primary: rgba(245, 249, 245, 0.94);
+  --text-secondary: rgba(219, 229, 220, 0.64);
+  --text-tertiary: rgba(201, 215, 203, 0.62);
+  --text-on-accent: #071008;
 
   /* Kenarlık / ayırıcı */
-  --border-subtle: rgba(255, 255, 255, 0.06);
-  --border-default: rgba(255, 255, 255, 0.10);
-  --border-strong: rgba(255, 255, 255, 0.16);
+  --border-subtle: rgba(221, 240, 224, 0.06);
+  --border-default: rgba(221, 240, 224, 0.08);
+  --border-strong: rgba(221, 240, 224, 0.15);
 
-  /* Tek vurgu rengi — sakin, soğuk beyaz-mavi. Neon değil. */
-  --accent: #e8eaed;
-  --accent-muted: rgba(232, 234, 237, 0.14);
+  /* Tek vurgu rengi — düz acid-lime. Glow ve renkli gölge olmadan kullanılır. */
+  --accent: #a8ed63;
+  --accent-muted: rgba(168, 237, 99, 0.13);
+
+  /* Dashboard'a özel yüzeyler — yalnız sunum; global veri davranışı taşımaz. */
+  --dashboard-panel: #0b110d;
+  --dashboard-panel-raised: #111a13;
+  --dashboard-panel-signal: #152719;
+  --dashboard-rule: rgba(168, 237, 99, 0.2);
+  --dashboard-signal-muted: rgba(168, 237, 99, 0.08);
 
   /* Durum göstergeleri — yalnız Hermes/index durumu için (madde 18.3) */
-  --status-online: #7fb383;   /* sönük yeşil */
-  --status-offline: rgba(255, 255, 255, 0.28);  /* gri — hata değil (madde 18.4) */
+  --status-online: #8fcf67; /* sönük yeşil */
+  --status-offline: rgba(255, 255, 255, 0.28); /* gri — hata değil (madde 18.4) */
   --status-attention: #c8a45c; /* sönük amber — yalnız veri kaybı riski (madde 25.4) */
 }
 
@@ -123,7 +136,7 @@
 
   --text-primary: rgba(0, 0, 0, 0.88);
   --text-secondary: rgba(0, 0, 0, 0.56);
-  --text-tertiary: rgba(0, 0, 0, 0.36);
+  --text-tertiary: rgba(0, 0, 0, 0.58);
   --text-on-accent: #ffffff;
 
   --border-subtle: rgba(0, 0, 0, 0.05);
@@ -133,12 +146,18 @@
   --accent: #1a1a1c;
   --accent-muted: rgba(26, 26, 28, 0.08);
 
+  --dashboard-panel: #ffffff;
+  --dashboard-panel-raised: #f2f6f1;
+  --dashboard-panel-signal: #e9f4e4;
+  --dashboard-rule: rgba(63, 125, 22, 0.24);
+  --dashboard-signal-muted: rgba(63, 125, 22, 0.08);
+
   --status-online: #5c8a60;
   --status-offline: rgba(0, 0, 0, 0.24);
   --status-attention: #a37d3c;
 
   --elevation-1: 0 1px 2px rgba(0, 0, 0, 0.08), 0 1px 1px rgba(0, 0, 0, 0.04);
-  --elevation-2: 0 4px 12px rgba(0, 0, 0, 0.10), 0 2px 4px rgba(0, 0, 0, 0.06);
+  --elevation-2: 0 4px 12px rgba(0, 0, 0, 0.1), 0 2px 4px rgba(0, 0, 0, 0.06);
   --elevation-3: 0 12px 32px rgba(0, 0, 0, 0.14), 0 4px 8px rgba(0, 0, 0, 0.08);
 }
 

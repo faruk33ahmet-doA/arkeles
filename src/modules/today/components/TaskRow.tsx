@@ -13,7 +13,12 @@ import type { Task } from "@/lib/generated";
  * "tıklandığında hata veren buton yoktur".
  */
 
-export function TaskRow({ task }: { task: Task }) {
+interface TaskRowProps {
+  task: Task;
+  variant?: "default" | "dashboard";
+}
+
+export function TaskRow({ task, variant = "default" }: TaskRowProps) {
   const isDone = task.status === "done";
   const mutation = useTaskMutation();
 
@@ -22,13 +27,17 @@ export function TaskRow({ task }: { task: Task }) {
     mutation.mutate({
       taskId: task.id,
       done: !isDone,
-      label: isDone ? `"${task.title}" yeniden açılıyordu.` : `"${task.title}" tamamlanıyordu.`,
+      label: isDone
+        ? `"${task.title}" yeniden açılıyordu.`
+        : `"${task.title}" tamamlanıyordu.`,
       noteId: task.noteId,
     });
   };
 
   return (
-    <div className="flex items-center gap-3 py-2">
+    <div
+      className={cn("flex items-center gap-3", variant === "dashboard" ? "py-3" : "py-2")}
+    >
       <input
         type="checkbox"
         checked={isDone}
@@ -55,7 +64,14 @@ export function TaskRow({ task }: { task: Task }) {
         <span className="shrink-0 text-xs text-text-tertiary">yönetilmiyor</span>
       ) : null}
       {task.workspace ? (
-        <span className="shrink-0 text-xs text-text-tertiary">{task.workspace}</span>
+        <span
+          className={cn(
+            "shrink-0 text-xs",
+            variant === "dashboard" ? "text-text-secondary" : "text-text-tertiary",
+          )}
+        >
+          {task.workspace}
+        </span>
       ) : null}
     </div>
   );

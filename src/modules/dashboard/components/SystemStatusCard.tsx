@@ -1,8 +1,9 @@
-import { Card } from "@/ui/Card";
 import { StatusDot } from "@/ui/StatusDot";
 import { useHermesHealth } from "@/data/hooks/useHermesHealth";
 import { useVaultStatus } from "@/data/hooks/useVaultStatus";
 import { useIndexStatus } from "@/data/hooks/useIndexStatus";
+import { useZoom } from "@/navigation/zoom/useZoom";
+import { DashboardCard, dashboardActionClass } from "./DashboardCard";
 
 /*
  * Sistem durumu — Anayasa madde 18.3, 18.4, 24.2.
@@ -19,10 +20,23 @@ export function SystemStatusCard() {
   const { data: hermes } = useHermesHealth();
   const { data: vault } = useVaultStatus();
   const { data: index } = useIndexStatus();
+  const { enterLayer } = useZoom();
 
   return (
-    <Card title="Sistem">
-      <div className="flex flex-col gap-3">
+    <DashboardCard
+      title="Sistem durumu"
+      className="col-span-2"
+      action={
+        <button
+          type="button"
+          onClick={() => enterLayer("system")}
+          className={dashboardActionClass}
+        >
+          Sistemi aç
+        </button>
+      }
+    >
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 xl:grid-cols-1">
         <StatusDot
           status={hermes?.reachable ? "online" : "offline"}
           label={
@@ -35,17 +49,19 @@ export function SystemStatusCard() {
         />
         <StatusDot
           status={vault?.path ? "online" : "offline"}
+          label={vault?.path ? `Vault · ${vault.noteCount} not` : "Vault yapılandırılmadı"}
+        />
+        <StatusDot
+          status={index?.ready && !index.rebuilding ? "online" : "offline"}
           label={
-            vault?.path
-              ? `Vault · ${vault.noteCount} not`
-              : "Vault yapılandırılmadı"
+            index?.rebuilding
+              ? "Index taranıyor"
+              : index?.ready
+                ? "Index hazır"
+                : "Index bekleniyor"
           }
         />
-        {/* Tarama sürüyorsa bilgi ver, uyarı verme (madde 25.2). */}
-        {index?.rebuilding ? (
-          <StatusDot status="offline" label="Index taranıyor" />
-        ) : null}
       </div>
-    </Card>
+    </DashboardCard>
   );
 }

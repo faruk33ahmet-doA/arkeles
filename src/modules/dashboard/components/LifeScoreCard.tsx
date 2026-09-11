@@ -1,6 +1,5 @@
-import { Card } from "@/ui/Card";
-import { EmptyState } from "@/ui/EmptyState";
 import type { LifeScore } from "@/lib/generated";
+import { DashboardCard } from "./DashboardCard";
 
 /*
  * Hayat Skoru — Anayasa madde 11. En hassas bileşen.
@@ -34,9 +33,9 @@ interface LifeScoreCardProps {
 
 export function LifeScoreCard({ score, loading = false }: LifeScoreCardProps) {
   return (
-    <Card title="Hayat skoru">
+    <DashboardCard title="Hayat skoru" className="bg-dashboard-signal">
       {score ? (
-        <div className="flex flex-col gap-1">
+        <div className="flex min-h-dashboard-compact flex-col justify-between">
           <span className="text-2xl font-semibold tabular-nums text-text-primary">
             {score.value}
           </span>
@@ -45,10 +44,14 @@ export function LifeScoreCard({ score, loading = false }: LifeScoreCardProps) {
             {formatFreshness(score.computedAt)}
           </span>
         </div>
-      ) : loading ? null : (
-        /* Hermes hiç hesaplamadıysa — hata değil, henüz yok (madde 26.2). */
-        <EmptyState message="Henüz hesaplanmadı." />
+      ) : (
+        <div className="flex min-h-dashboard-compact flex-col justify-between">
+          <span className="text-2xl font-semibold tabular-nums text-text-tertiary">—</span>
+          <span className="text-xs text-text-tertiary">
+            {loading ? "Okunuyor" : "Henüz hesaplanmadı"}
+          </span>
+        </div>
       )}
-    </Card>
+    </DashboardCard>
   );
 }
