@@ -1,31 +1,43 @@
 /*!
-İş kuyruğu — Sprint 4 madde 3.
+İş defteri — Sprint 4 madde 3; Sprint 5'te GERÇEK Hermes turuna bağlandı.
 
 ARKELÉS İŞİ YAPMAZ (madde 7.3). Bu modül yalnız:
   - hangi isteğin gönderildiğini kaydeder
-  - Hermes'in bildirdiği durumu okur ve saklar
-  - sonuç referanslarını tutar
+  - Hermes'in bildirdiği sonucu deftere yazar
 
-Durum ARKELÉS tarafından TAHMİN EDİLMEZ. Hermes "running" demiyorsa iş
-"running" gösterilmez.
+Durum ARKELÉS tarafından TAHMİN EDİLMEZ; her geçişin tek bir kaynağı var:
+  queued     ARKELÉS kaydetti; Hermes turu henüz kabul etmedi
+  running    Hermes istemi kabul etti (`turn::run` → on_started)
+  completed  Hermes turun bittiğini bildirdi
+  failed     Hermes hata bildirdi YA DA Hermes'e ulaşılamadı (kod ayırır)
+  cancelled  kullanıcı iptal etti; Hermes turu kesti ya da tur hiç başlamadı
+
+Hermes'e özgü adlar (metod, olay) BURADA YOK — hepsi `turn.rs`'te.
 */
 
-use rusqlite::{params, Connection};
-use serde_json::{json, Value};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Mutex, MutexGuard};
 
+use rusqlite::{params, Connection, OptionalExtension};
+
+use crate::config::workspaces::WORKSPACES;
 use crate::error::{CoreError, CoreResult};
-use crate::hermes::{contract, rpc};
-use crate::types::{Job, JobOutput};
+use crate::hermes::contract;
+use crate::hermes::turn::Outcome;
+use crate::types::Job;
 use crate::vault::time;
 
 /// Aktivite geçmişinde bir sayfada dönen en fazla iş.
 const HISTORY_LIMIT: usize = 200;
-
-/// Hermes'in bildirebileceği durumlar. Bunun dışı KABUL EDİLMEZ.
-const VALID_STATUSES: &[&str] = &["queued", "running", "completed", "failed", "cancelled"];
+/// Listede görünen başlık uzunluğu.
+const SUMMARY_CHARS: usize = 120;
+/// Hermes'e giden metin sınırı — sınırsız metin defteri ve Hermes'i şişirir.
+const MAX_INPUT_CHARS: usize = 8000;
+/// Aynı anda yürüyen tur sayısı: ARKELÉS Hermes oturumlarını tüketmesin.
+const MAX_CONCURRENT: usize = 2;
 
 fn new_job_id() -> String {
-    use std::sync::atomic::{AtomicU64, Ordering};
+    use std::sync::atomic::AtomicU64;
     static COUNTER: AtomicU64 = AtomicU64::new(1);
     let secs = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -34,16 +46,55 @@ fn new_job_id() -> String {
     format!("job-{secs}-{}", COUNTER.fetch_add(1, Ordering::Relaxed))
 }
 
+// --- uçuştaki işler (süreç içi) ----------------------------------------------
+
+/// Turu şu an bu süreçte yürüyen işler. Aynı iş İKİ KEZ gönderilmez.
+static IN_FLIGHT: Mutex<Vec<String>> = Mutex::new(Vec::new());
+/// Defter değişti mi? Sürücü bunu görünce arayüze tek olay yayınlar.
+static DIRTY: AtomicBool = AtomicBool::new(false);
+
+fn in_flight() -> MutexGuard<'static, Vec<String>> {
+    IN_FLIGHT.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
+}
+
+/// Kuyruktaki bir sonraki işi sahiplenir. Sınır doluysa veya iş yoksa `None`.
+pub fn claim_next(conn: &Connection) -> CoreResult<Option<String>> {
+    let queued = queued_ids(conn)?;
+    let mut flight = in_flight();
+    if flight.len() >= MAX_CONCURRENT {
+        return Ok(None);
+    }
+    let next = queued.into_iter().find(|id| !flight.contains(id));
+    if let Some(id) = &next {
+        flight.push(id.clone());
+    }
+    Ok(next)
+}
+
+pub fn release(job_id: &str) {
+    in_flight().retain(|id| id != job_id);
+}
+
+pub fn mark_dirty() {
+    DIRTY.store(true, Ordering::Relaxed);
+}
+
+pub fn take_dirty() -> bool {
+    DIRTY.swap(false, Ordering::Relaxed)
+}
+
+// --- gönderme ------------------------------------------------------------------
+
 /*
- * İş gönderir — Sprint 4 madde 2, 6.
+ * İş kaydeder — Sprint 4 madde 2, 6.
  *
  * GÜVENLİK (madde 19):
- *  - `action` ALLOWLIST'ten doğrulanır; keyfi metod adı çalıştırılamaz
- *  - kullanıcı metni PARAMETRE olarak gider, hiçbir yere interpolate edilmez
- *  - Hermes'e ulaşılamazsa iş "failed" olarak kaydedilir, sessizce kaybolmaz
+ *  - `action` ve `workspace` ALLOWLIST'ten doğrulanır
+ *  - kullanıcı metni düz metin olarak saklanır ve gider; hiçbir yere
+ *    komut olarak interpolate edilmez
  *
- * OPTİMİSTİK (madde 6): kayıt ÖNCE yapılır, Hermes çağrısı SONRA. Böylece
- * arayüz işi ilk karede görür ve Hermes'in cevabı beklenmez.
+ * OPTİMİSTİK (madde 6): yalnız kayıt yapılır ve hemen döner; Hermes turu
+ * arka plan sürücüsünde yürür.
  */
 pub fn submit(
     conn: &Connection,
@@ -51,188 +102,131 @@ pub fn submit(
     workspace: Option<&str>,
     input: &str,
 ) -> CoreResult<Job> {
-    // Madde 19: allowlist dışı aksiyon çekirdekte reddedilir.
     let action = contract::find_action(action_id).ok_or(CoreError::ActionNotAllowed)?;
+
+    // İstem başlığına giren her şey bilinen bir değer olmalı.
+    if let Some(workspace) = workspace {
+        if !WORKSPACES.iter().any(|w| w.id == workspace) {
+            return Err(CoreError::TargetMismatch);
+        }
+    }
 
     let text = input.trim();
     if text.is_empty() {
         return Err(CoreError::TargetMismatch);
     }
+    let text: String = text.chars().take(MAX_INPUT_CHARS).collect();
+    let summary: String = text.chars().take(SUMMARY_CHARS).collect();
 
     let id = new_job_id();
-    let now = time::now_iso();
-    // Özet KISALTILIR: defterin işi başlık tutmak, metin saklamak değil.
-    let summary: String = text.chars().take(120).collect();
-
     conn.execute(
-        "INSERT INTO jobs (id, action, workspace, summary, status, created_at, source)
-         VALUES (?1, ?2, ?3, ?4, 'queued', ?5, 'arkeles')",
-        params![id, action.id, workspace, summary, now],
+        "INSERT INTO jobs (id, action, workspace, summary, input, status, created_at, source)
+         VALUES (?1, ?2, ?3, ?4, ?5, 'queued', ?6, 'arkeles')",
+        params![id, action.id, workspace, summary, text, time::now_iso()],
     )
     .map_err(CoreError::IndexQuery)?;
 
-    Ok(read_one(conn, &id)?)
+    read_one(conn, &id)
+}
+
+/// Hermes'e gidecek başlık ve metin.
+pub struct Prepared {
+    pub title: String,
+    pub prompt: String,
+}
+
+/// Kuyruktaki işin istemini hazırlar. İş artık kuyrukta değilse (iptal
+/// edildi) `TargetMismatch` — tur hiç başlamaz.
+pub fn prepare(conn: &Connection, job_id: &str) -> CoreResult<Prepared> {
+    let (action, workspace, input): (String, Option<String>, String) = conn
+        .query_row(
+            "SELECT action, workspace, input FROM jobs WHERE id = ?1 AND status = 'queued'",
+            params![job_id],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+        )
+        .optional()
+        .map_err(CoreError::IndexQuery)?
+        .ok_or(CoreError::TargetMismatch)?;
+
+    let action = contract::find_action(&action).ok_or(CoreError::ActionNotAllowed)?;
+    Ok(Prepared {
+        title: contract::session_title(action, workspace.as_deref()),
+        prompt: contract::prompt_for(action, workspace.as_deref(), &input),
+    })
+}
+
+/// Hermes istemi kabul etti → running. İş bu arada iptal edildiyse `false`
+/// döner ve çağıran turu Hermes'te de keser.
+pub fn mark_started(conn: &Connection, job_id: &str, session_ref: &str) -> CoreResult<bool> {
+    let changed = conn
+        .execute(
+            "UPDATE jobs SET status = 'running', started_at = ?2, hermes_ref = ?3
+             WHERE id = ?1 AND status = 'queued'",
+            params![job_id, time::now_iso(), session_ref],
+        )
+        .map_err(CoreError::IndexQuery)?;
+    Ok(changed == 1)
+}
+
+/// Hermes'in bildirdiği sonucu yazar. Bitmiş iş YENİDEN YAZILMAZ.
+pub fn apply_outcome(conn: &Connection, job_id: &str, outcome: &Outcome) -> CoreResult<()> {
+    let (status, code, message) = match outcome {
+        Outcome::Completed => ("completed", None, None),
+        Outcome::Cancelled => ("cancelled", None, None),
+        Outcome::Failed(message) => ("failed", Some("hermes_failed"), Some(message.as_str())),
+    };
+    conn.execute(
+        "UPDATE jobs SET status = ?2, finished_at = ?3, error_code = ?4, error_message = ?5
+         WHERE id = ?1 AND status IN ('queued', 'running')",
+        params![job_id, status, time::now_iso(), code, message],
+    )
+    .map_err(CoreError::IndexQuery)?;
+    Ok(())
+}
+
+/// Bağlantı düzeyi hata → failed. Madde 15: hata SESSİZCE KAYBOLMAZ.
+pub fn fail(conn: &Connection, job_id: &str, err: &CoreError) -> CoreResult<()> {
+    let (code, message) = describe(err);
+    conn.execute(
+        "UPDATE jobs SET status = 'failed', finished_at = ?2, error_code = ?3, error_message = ?4
+         WHERE id = ?1 AND status IN ('queued', 'running')",
+        params![job_id, time::now_iso(), code, message],
+    )
+    .map_err(CoreError::IndexQuery)?;
+    Ok(())
 }
 
 /*
- * Kuyruktaki işi Hermes'e iletir — arka planda çalışır.
+ * İptal — Sprint 4 madde 16.
  *
- * Kullanıcı metni `params` içinde GİDER; hiçbir komut satırına, hiçbir
- * dizgeye interpolate EDİLMEZ (Sprint 4 madde 2).
+ * queued  → yerel olarak iptal edilir (tur başladıysa sürücü onu da keser)
+ * running → Hermes oturum kimliği döner; çağıran turu Hermes'te keser ve
+ *           "cancelled" durumunu HERMES bildirir — ARKELÉS önceden yazmaz
  */
-pub fn dispatch(conn: &Connection, job_id: &str) -> CoreResult<()> {
-    let job = read_one(conn, job_id)?;
-    let Some(action) = contract::find_action(&job.action) else {
-        return fail(conn, job_id, "action_not_allowed", "Aksiyon tanımlı değil");
-    };
+pub fn cancel(conn: &Connection, job_id: &str) -> CoreResult<Option<String>> {
+    let (status, reference): (String, Option<String>) = conn
+        .query_row(
+            "SELECT status, hermes_ref FROM jobs WHERE id = ?1",
+            params![job_id],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .optional()
+        .map_err(CoreError::IndexQuery)?
+        .ok_or(CoreError::TargetMismatch)?;
 
-    let params = json!({
-        "action": action.id,
-        "workspace": job.workspace,
-        "input": job.summary,
-        "origin": "arkeles",
-    });
-
-    /*
-     * Hermes'in metodu: iş gönderme için `command.dispatch` kullanılır
-     * (yerel kurulumdan doğrulanan metod ailesi). Metod adı SABİT KODLU —
-     * arayüzden gelmez.
-     */
-    match rpc::call("command.dispatch", params) {
-        Ok(result) => {
-            let hermes_ref = result
-                .get("session_id")
-                .or_else(|| result.get("id"))
-                .and_then(Value::as_str)
-                .map(str::to_string);
-
+    match status.as_str() {
+        "queued" => {
             conn.execute(
-                "UPDATE jobs SET status = 'running', started_at = ?2, hermes_ref = ?3
+                "UPDATE jobs SET status = 'cancelled', finished_at = ?2
                  WHERE id = ?1 AND status = 'queued'",
-                params![job_id, time::now_iso(), hermes_ref],
+                params![job_id, time::now_iso()],
             )
             .map_err(CoreError::IndexQuery)?;
-            Ok(())
+            Ok(None)
         }
-        Err(err) => {
-            // Madde 15 (hata doktrini): hata SESSİZCE KAYBOLMAZ.
-            let (code, message) = describe(&err);
-            fail(conn, job_id, code, &message)
-        }
+        "running" => Ok(reference),
+        _ => Ok(None),
     }
-}
-
-/// Hermes'ten bir işin güncel durumunu çeker ve deftere yazar.
-///
-/// Hermes tanımadığı bir durum bildirirse GÖRMEZDEN GELİNİR: uydurma
-/// durum deftere girmez.
-pub fn refresh(conn: &Connection, job_id: &str) -> CoreResult<()> {
-    let job = read_one(conn, job_id)?;
-    let Some(reference) = job_ref(conn, job_id)? else {
-        return Ok(()); // henüz Hermes'e ulaşmadı
-    };
-    if matches!(job.status.as_str(), "completed" | "failed" | "cancelled") {
-        return Ok(()); // bitmiş iş tekrar sorulmaz
-    }
-
-    let Ok(result) = rpc::call("session.status", json!({ "session_id": reference })) else {
-        return Ok(()); // ulaşılamadı — madde 18.4: hata değil, sakin durum
-    };
-
-    apply_remote_status(conn, job_id, &result)
-}
-
-/// Hermes'in cevabını deftere uygular. Tanınmayan alanlar YOK SAYILIR.
-pub fn apply_remote_status(conn: &Connection, job_id: &str, result: &Value) -> CoreResult<()> {
-    let status = result.get("status").and_then(Value::as_str).unwrap_or("");
-    if !VALID_STATUSES.contains(&status) {
-        return Ok(()); // uydurma durum deftere girmez
-    }
-
-    // Sprint 4 madde 7: SAHTE PROGRESS ÜRETİLMEZ. Hermes sayı vermiyorsa None.
-    let progress = result
-        .get("progress")
-        .and_then(Value::as_f64)
-        .filter(|p| (0.0..=100.0).contains(p))
-        .map(|p| p as i64);
-
-    let finished = matches!(status, "completed" | "failed" | "cancelled");
-
-    conn.execute(
-        "UPDATE jobs SET status = ?2, progress = ?3,
-                finished_at = CASE WHEN ?4 THEN ?5 ELSE finished_at END
-         WHERE id = ?1",
-        params![job_id, status, progress, finished, time::now_iso()],
-    )
-    .map_err(CoreError::IndexQuery)?;
-
-    if status == "failed" {
-        let message = result
-            .get("error")
-            .and_then(Value::as_str)
-            .unwrap_or("Hermes işi tamamlayamadı")
-            .chars()
-            .take(200)
-            .collect::<String>();
-        conn.execute(
-            "UPDATE jobs SET error_code = 'hermes_failed', error_message = ?2 WHERE id = ?1",
-            params![job_id, message],
-        )
-        .map_err(CoreError::IndexQuery)?;
-    }
-
-    // Sonuç referansları — madde 8. ARKELÉS sonuç UYDURMAZ.
-    if let Some(outputs) = result.get("outputs").and_then(Value::as_array) {
-        conn.execute("DELETE FROM job_outputs WHERE job_id = ?1", params![job_id])
-            .map_err(CoreError::IndexQuery)?;
-
-        for output in outputs {
-            let kind = output.get("kind").and_then(Value::as_str).unwrap_or("");
-            if !matches!(kind, "note" | "document" | "external") {
-                continue; // tanınmayan tür saklanmaz
-            }
-            let Some(reference) = output.get("ref").and_then(Value::as_str) else {
-                continue;
-            };
-            let label = output
-                .get("label")
-                .and_then(Value::as_str)
-                .unwrap_or(reference);
-
-            conn.execute(
-                "INSERT OR REPLACE INTO job_outputs (job_id, kind, ref, label)
-                 VALUES (?1, ?2, ?3, ?4)",
-                params![job_id, kind, reference, label],
-            )
-            .map_err(CoreError::IndexQuery)?;
-        }
-    }
-
-    Ok(())
-}
-
-/// İşi iptal eder — Sprint 4 madde 16. Hermes desteklemiyorsa hata döner
-/// ve arayüz butonu zaten göstermez (capability-driven).
-pub fn cancel(conn: &Connection, job_id: &str) -> CoreResult<()> {
-    let Some(reference) = job_ref(conn, job_id)? else {
-        // Henüz gönderilmemiş: yerel olarak iptal edilebilir.
-        conn.execute(
-            "UPDATE jobs SET status = 'cancelled', finished_at = ?2
-             WHERE id = ?1 AND status = 'queued'",
-            params![job_id, time::now_iso()],
-        )
-        .map_err(CoreError::IndexQuery)?;
-        return Ok(());
-    };
-
-    rpc::call("session.cancel", json!({ "session_id": reference }))?;
-
-    conn.execute(
-        "UPDATE jobs SET status = 'cancelled', finished_at = ?2 WHERE id = ?1",
-        params![job_id, time::now_iso()],
-    )
-    .map_err(CoreError::IndexQuery)?;
-    Ok(())
 }
 
 /// Başarısız işi yeniden kuyruğa alır — Sprint 4 madde 15.
@@ -249,40 +243,48 @@ pub fn retry(conn: &Connection, job_id: &str) -> CoreResult<()> {
     Ok(())
 }
 
-fn fail(conn: &Connection, job_id: &str, code: &str, message: &str) -> CoreResult<()> {
+/*
+ * Açılışta yetim işler.
+ *
+ * Tur bağlantıya bağlıdır ve bağlantı önceki süreçle kapandı: sonucu ARKELÉS
+ * artık öğrenemez. "Tamamlandı" demek de "sürüyor" demek de UYDURMA olur;
+ * dürüst olan başarısız + açıklama (kullanıcı isterse yeniden dener).
+ */
+pub fn recover_orphans(conn: &Connection) -> CoreResult<usize> {
     conn.execute(
-        "UPDATE jobs SET status = 'failed', finished_at = ?2, error_code = ?3, error_message = ?4
-         WHERE id = ?1",
-        params![job_id, time::now_iso(), code, message],
+        "UPDATE jobs SET status = 'failed', finished_at = ?1, error_code = 'hermes_unreachable',
+                error_message = 'Uygulama kapanırken iş sürüyordu; Hermes sonucu bildirmedi.'
+         WHERE status = 'running'",
+        params![time::now_iso()],
     )
-    .map_err(CoreError::IndexQuery)?;
-    Ok(())
+    .map_err(CoreError::IndexQuery)
 }
 
 /// Hata → (kod, kullanıcıya gösterilebilir kısa mesaj).
 ///
 /// Sprint 4 madde 19: stack trace ASLA kullanıcıya gitmez.
 fn describe(err: &CoreError) -> (&'static str, String) {
-    match err {
-        CoreError::HermesUnreachable => ("hermes_unreachable", "Hermes'e ulaşılamadı.".into()),
-        CoreError::HermesUnauthorized => (
-            "hermes_unauthorized",
-            "Hermes kimlik doğrulaması başarısız.".into(),
-        ),
-        CoreError::HermesTimeout => ("hermes_timeout", "Hermes zamanında yanıt vermedi.".into()),
-        CoreError::HermesRejected(message) => ("hermes_rejected", message.clone()),
-        CoreError::ActionNotAllowed => ("action_not_allowed", "Bu aksiyon tanımlı değil.".into()),
-        _ => ("unknown", "İş gönderilemedi.".into()),
-    }
+    let message = match err {
+        CoreError::HermesUnreachable => "Hermes'e ulaşılamadı.".to_string(),
+        CoreError::HermesUnauthorized => "Hermes kimlik doğrulaması başarısız.".to_string(),
+        CoreError::HermesTimeout => "Hermes zamanında yanıt vermedi.".to_string(),
+        CoreError::HermesRejected(message) => message.clone(),
+        CoreError::HermesMalformed => "Hermes beklenmeyen bir cevap verdi.".to_string(),
+        CoreError::ActionNotAllowed => "Bu aksiyon tanımlı değil.".to_string(),
+        _ => return ("unknown", "İş gönderilemedi.".into()),
+    };
+    (err.code(), message)
 }
 
-fn job_ref(conn: &Connection, job_id: &str) -> CoreResult<Option<String>> {
+#[cfg(test)]
+fn job_ref(conn: &Connection, job_id: &str) -> Option<String> {
     conn.query_row(
         "SELECT hermes_ref FROM jobs WHERE id = ?1",
         params![job_id],
         |row| row.get::<_, Option<String>>(0),
     )
-    .map_err(|_| CoreError::TargetMismatch)
+    .ok()
+    .flatten()
 }
 
 // --- okuma -------------------------------------------------------------------
@@ -366,35 +368,11 @@ fn query(
                 error_code: row.get(9)?,
                 error_message: row.get(10)?,
                 source: row.get(11)?,
-                outputs: Vec::new(),
             })
         })
         .map_err(CoreError::IndexQuery)?;
 
-    let mut jobs = rows
-        .collect::<rusqlite::Result<Vec<Job>>>()
-        .map_err(CoreError::IndexQuery)?;
-
-    for job in &mut jobs {
-        job.outputs = outputs_of(conn, &job.id)?;
-    }
-    Ok(jobs)
-}
-
-fn outputs_of(conn: &Connection, job_id: &str) -> CoreResult<Vec<JobOutput>> {
-    let mut stmt = conn
-        .prepare("SELECT kind, ref, label FROM job_outputs WHERE job_id = ?1 ORDER BY kind, ref")
-        .map_err(CoreError::IndexQuery)?;
-    let rows = stmt
-        .query_map(params![job_id], |row| {
-            Ok(JobOutput {
-                kind: row.get(0)?,
-                reference: row.get(1)?,
-                label: row.get(2)?,
-            })
-        })
-        .map_err(CoreError::IndexQuery)?;
-    rows.collect::<rusqlite::Result<Vec<JobOutput>>>()
+    rows.collect::<rusqlite::Result<Vec<Job>>>()
         .map_err(CoreError::IndexQuery)
 }
 
@@ -428,22 +406,10 @@ pub fn last_completed(conn: &Connection) -> CoreResult<Option<Job>> {
     Ok(if jobs.is_empty() { None } else { Some(jobs.remove(0)) })
 }
 
-/// Kuyrukta bekleyen işlerin kimlikleri — arka plan gönderici için.
-pub fn queued_ids(conn: &Connection) -> CoreResult<Vec<String>> {
+/// Kuyrukta bekleyen işlerin kimlikleri — arka plan sürücüsü için.
+fn queued_ids(conn: &Connection) -> CoreResult<Vec<String>> {
     let mut stmt = conn
         .prepare("SELECT id FROM jobs WHERE status = 'queued' ORDER BY created_at ASC LIMIT 10")
-        .map_err(CoreError::IndexQuery)?;
-    let rows = stmt
-        .query_map([], |row| row.get::<_, String>(0))
-        .map_err(CoreError::IndexQuery)?;
-    rows.collect::<rusqlite::Result<Vec<String>>>()
-        .map_err(CoreError::IndexQuery)
-}
-
-/// Durumu Hermes'ten tazelenmesi gereken işler.
-pub fn running_ids(conn: &Connection) -> CoreResult<Vec<String>> {
-    let mut stmt = conn
-        .prepare("SELECT id FROM jobs WHERE status = 'running' ORDER BY created_at ASC LIMIT 20")
         .map_err(CoreError::IndexQuery)?;
     let rows = stmt
         .query_map([], |row| row.get::<_, String>(0))

@@ -76,6 +76,7 @@ describe("Cmd+K — Hermes aksiyonları (madde 18.2)", () => {
   it("aksiyon doğru kurum ve aksiyonla açılır", () => {
     const calls: { actionId: string; workspaceId: string | null }[] = [];
     const ctx: ActionContext = {
+    moveSelectedTask: () => {},
       enterLayer: () => {},
       closePalette: () => {},
       openQuickCapture: () => {},

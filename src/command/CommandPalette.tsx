@@ -23,6 +23,7 @@ import { useWorkspaces } from "@/data/hooks/useWork";
 import { useHermesActions } from "@/data/hooks/useHermes";
 import { useHermesStore } from "@/state/hermesStore";
 import { useWorkStore } from "@/state/workStore";
+import { useSelectedTaskMove } from "@/data/hooks/useTaskMove";
 import { QuickCapture } from "./QuickCapture";
 import { getActions, type Action, type ActionContext } from "./actionRegistry";
 import { cn } from "@/lib/cn";
@@ -62,6 +63,8 @@ export function CommandPalette() {
   const openHermesPanel = useHermesStore((s) => s.open);
   const openWorkspaceInStore = useWorkStore((s) => s.openWorkspace);
   const setPanel = useWorkStore((s) => s.setPanel);
+  const taskSelected = useWorkStore((s) => s.noteId !== null && s.selectedTaskId !== null);
+  const { moveSelected } = useSelectedTaskMove();
 
   /*
    * Palet iki kipte çalışır: aksiyon listesi ve Hızlı Yakalama.
@@ -103,8 +106,10 @@ export function CommandPalette() {
         }
         openHermesPanel(actionId, workspaceId);
       },
+      // Sprint 5 madde 8: sürükle-bırakın klavye karşılığı — aynı mutasyon.
+      moveSelectedTask: moveSelected,
     }),
-    [enterLayer, setOpen, openWorkspaceInStore, setPanel, openHermesPanel],
+    [enterLayer, setOpen, openWorkspaceInStore, setPanel, openHermesPanel, moveSelected],
   );
 
   // Madde 18.2 filtresi: yeteneği olmayan semantik aksiyon gizlenir.
@@ -113,6 +118,7 @@ export function CommandPalette() {
       inboxAvailable: inbox?.exists === true,
       workspaces,
       hermesActions: hermesAvailable,
+      taskSelected,
     }).filter((action) => {
       if (action.kind !== "semantic") return true;
       if (!action.capability) return false;
@@ -120,7 +126,7 @@ export function CommandPalette() {
         hermes?.reachable === true && hermes.capabilities.includes(action.capability)
       );
     });
-  }, [hermes, inbox, workspaces, hermesAvailable]);
+  }, [hermes, inbox, workspaces, hermesAvailable, taskSelected]);
 
   const groups = useMemo(() => groupActions(visibleActions), [visibleActions]);
 
@@ -190,7 +196,12 @@ export function CommandPalette() {
                         onSelect={() => action.run?.(ctx)}
                         className={itemClass}
                       >
-                        {action.title}
+                        <span className="min-w-0 flex-1 truncate">{action.title}</span>
+                        {action.shortcut ? (
+                          <kbd className="ml-3 shrink-0 font-sans text-xs text-text-tertiary">
+                            {action.shortcut}
+                          </kbd>
+                        ) : null}
                       </CommandItem>
                     ))}
                   </CommandGroup>
@@ -254,7 +265,7 @@ const groupHeadingClass = cn(
 );
 
 const itemClass = cn(
-  "cursor-default rounded-sm px-2 py-2 text-base text-text-secondary",
+  "flex cursor-default items-center rounded-sm px-2 py-2 text-base text-text-secondary",
   "data-[selected=true]:bg-accent-muted data-[selected=true]:text-text-primary",
   "data-[disabled=true]:opacity-100",
 );

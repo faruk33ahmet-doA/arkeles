@@ -220,31 +220,22 @@ pub struct NoteDetail {
     pub incoming: Vec<NoteLink>,
 }
 
-/// Bir bağlantı ucu. Hedef index'te yoksa `noteId` boştur — bağlantı
-/// yine GÖSTERİLİR, çünkü Obsidian'da kırık bağlantı da bir bilgidir.
+/// Bir bağlantı ucu. Hedef ya bir NOT (`noteId`) ya bir BELGEDİR
+/// (`documentId`, Sprint 5) — ikisi birden asla. İkisi de boşsa bağlantı
+/// kırıktır ve yine GÖSTERİLİR: Obsidian'da kırık bağlantı da bir bilgidir.
 #[derive(Debug, Serialize, TS)]
 #[ts(export, export_to = "../../src/lib/generated/")]
 #[serde(rename_all = "camelCase")]
 pub struct NoteLink {
     pub note_id: Option<String>,
+    /// Index'teki belge kimliği. YOL DEĞİL — açma işi güvenli çözücüden geçer.
+    pub document_id: Option<String>,
     pub title: String,
 }
 
 // ===========================================================================
 // HERMES İŞ KUYRUĞU — Sprint 4
 // ===========================================================================
-
-/// Bir işin sonucu — Sprint 4 madde 8. ARKELÉS sonuç ÜRETMEZ, işaret eder.
-#[derive(Debug, Clone, Serialize, TS)]
-#[ts(export, export_to = "../../src/lib/generated/")]
-#[serde(rename_all = "camelCase")]
-pub struct JobOutput {
-    /// "note" | "document" | "external"
-    pub kind: String,
-    /// note → arkeles_id · document → vault yolu · external → serbest
-    pub reference: String,
-    pub label: String,
-}
 
 /// ARKELÉS'ten Hermes'e gönderilen semantik iş — Sprint 4 madde 3.
 ///
@@ -272,7 +263,6 @@ pub struct Job {
     pub error_message: Option<String>,
     /// arkeles | telegram | hermes-ui — Sprint 4 madde 17.
     pub source: String,
-    pub outputs: Vec<JobOutput>,
 }
 
 /// Dashboard Hermes özeti — Sprint 4 madde 4, 13.

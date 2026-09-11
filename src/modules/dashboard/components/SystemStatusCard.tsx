@@ -26,9 +26,11 @@ export function SystemStatusCard() {
         <StatusDot
           status={hermes?.reachable ? "online" : "offline"}
           label={
-            hermes?.reachable
-              ? `Hermes bağlı${hermes.version ? ` · ${hermes.version}` : ""}`
-              : "Hermes ulaşılamıyor"
+            hermes === undefined
+              ? "Hermes yoklanıyor"
+              : hermes.reachable
+                ? `Hermes bağlı${hermes.version ? ` · ${hermes.version}` : ""}`
+                : "Hermes ulaşılamıyor"
           }
         />
         <StatusDot

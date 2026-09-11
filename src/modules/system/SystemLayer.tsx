@@ -88,9 +88,11 @@ export default function SystemLayer() {
             <StatusDot
               status={hermes?.reachable ? "online" : "offline"}
               label={
-                hermes?.reachable
-                  ? `Hermes bağlı${hermes.version ? ` · ${hermes.version}` : ""}`
-                  : "Hermes ulaşılamıyor"
+                hermes === undefined
+                  ? "Hermes yoklanıyor"
+                  : hermes.reachable
+                    ? `Hermes bağlı${hermes.version ? ` · ${hermes.version}` : ""}`
+                    : "Hermes ulaşılamıyor"
               }
             />
             {/* Madde 18.2: yetenekler yalnız BİLDİRİLDİĞİNDE görünür. */}

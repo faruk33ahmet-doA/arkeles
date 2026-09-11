@@ -87,6 +87,10 @@ pub enum CoreError {
     #[error("{0}")]
     HermesRejected(String),
 
+    /// Hermes'in cevabı beklenen biçimde değil (JSON değil, alan eksik).
+    #[error("Hermes beklenmeyen bir cevap verdi")]
+    HermesMalformed,
+
     /// Madde 19: allowlist dışı aksiyon adı.
     #[error("bu aksiyon tanımlı değil")]
     ActionNotAllowed,
@@ -114,6 +118,7 @@ impl CoreError {
             CoreError::HermesUnauthorized => "hermes_unauthorized",
             CoreError::HermesTimeout => "hermes_timeout",
             CoreError::HermesRejected(_) => "hermes_rejected",
+            CoreError::HermesMalformed => "hermes_malformed_response",
             CoreError::ActionNotAllowed => "action_not_allowed",
         }
     }

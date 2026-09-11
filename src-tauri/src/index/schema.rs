@@ -22,7 +22,7 @@ use rusqlite::Connection;
 use crate::error::{CoreError, CoreResult};
 
 /// Anayasa madde 15.5. Bu sayı artınca index sıfırlanır ve yeniden kurulur.
-pub const SCHEMA_VERSION: i64 = 4;
+pub const SCHEMA_VERSION: i64 = 5;
 
 /// Şemayı uygular. Sürüm uyuşmazsa her şeyi silip yeniden kurar.
 pub fn apply(conn: &Connection) -> CoreResult<()> {
@@ -185,17 +185,20 @@ CREATE TABLE jobs (
     -- Allowlist'teki kanonik aksiyon adı (hermes::contract::ACTIONS).
     action         TEXT NOT NULL,
     workspace      TEXT,
-    -- Kullanıcının yazdığı kısa açıklama. İÇERİK DEĞİL, başlık.
+    -- Kullanıcının yazdığı kısa açıklama (ilk 120 karakter) — listede başlık.
     summary        TEXT NOT NULL,
+    -- Hermes'e giden tam metin (en çok 8000 karakter). Yeniden denemede
+    -- aynı istek gider; kırpılmış başlık değil (Sprint 5).
+    input          TEXT NOT NULL DEFAULT '',
     -- queued | running | completed | failed | cancelled
     status         TEXT NOT NULL,
     created_at     TEXT NOT NULL,
     started_at     TEXT,
     finished_at    TEXT,
     -- Hermes ilerleme bildiriyorsa 0-100; bildirmiyorsa NULL.
-    -- Madde: sahte progress ÜRETİLMEZ.
+    -- Madde: sahte progress ÜRETİLMEZ. (Hermes 0.21.0 yüzde bildirmiyor.)
     progress       INTEGER,
-    -- Hermes oturum kimliği — durum buradan okunur.
+    -- Hermes oturum kimliği — iptal bu kimlikle yapılır.
     hermes_ref     TEXT,
     -- Hata KODU (kısa), stack trace DEĞİL (Sprint 4 madde 19).
     error_code     TEXT,
@@ -207,20 +210,4 @@ CREATE TABLE jobs (
 CREATE INDEX idx_jobs_created   ON jobs(created_at DESC);
 CREATE INDEX idx_jobs_status    ON jobs(status);
 CREATE INDEX idx_jobs_workspace ON jobs(workspace) WHERE workspace IS NOT NULL;
-
--- ---------------------------------------------------------------------------
--- job_outputs — bir işin ürettiği sonuç referansları (Sprint 4 madde 8).
---
--- ARKELÉS sonuç ÜRETMEZ; yalnız Hermes'in bildirdiği referansı saklar.
--- `kind`: note | document | external
--- `ref`:  note → arkeles_id veya başlık · document → vault yolu
--- ---------------------------------------------------------------------------
-CREATE TABLE job_outputs (
-    job_id  TEXT NOT NULL,
-    kind    TEXT NOT NULL,
-    ref     TEXT NOT NULL,
-    label   TEXT NOT NULL,
-    PRIMARY KEY (job_id, kind, ref),
-    FOREIGN KEY (job_id) REFERENCES jobs(id) ON DELETE CASCADE
-) STRICT;
 "#;

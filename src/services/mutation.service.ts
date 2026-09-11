@@ -93,3 +93,11 @@ const INBOX_UNKNOWN: InboxStatus = { path: "", exists: false };
 export async function getInboxStatus(): Promise<InboxStatus> {
   return ipc<InboxStatus>("inbox_status", INBOX_UNKNOWN);
 }
+
+/**
+ * Madde 8.1: görev sırası — satır taşıma (Sprint 5). Yalnız aynı nottaki
+ * iki görev; satırlar ve hash çekirdekte index'ten okunur.
+ */
+export async function moveTask(taskId: string, targetTaskId: string): Promise<MutationResult> {
+  return call<MutationResult>("move_task", { taskId, targetTaskId });
+}

@@ -25,7 +25,8 @@
         "hiddenTitle": true,
         "transparent": true,
         "theme": "Dark",
-        "visible": true
+        "visible": true,
+        "dragDropEnabled": false
       }
     ],
     "security": {

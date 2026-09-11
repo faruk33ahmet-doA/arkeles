@@ -99,6 +99,51 @@ pub async fn set_task_status(
     })
 }
 
+/*
+ * Görev sırası — Anayasa madde 8.1 (satır sırası mekanik mutasyondur).
+ * Sprint 2'de yazılan `move_line` altyapısının UI bağlantısı (Sprint 5).
+ *
+ * Arayüz yalnız İKİ GÖREV KİMLİĞİ gönderir; dosya yolu, satır numaraları ve
+ * hash index'ten okunur. Görev, hedef görevin yerine taşınır (dizi taşıma
+ * anlamı): aşağı taşırken hedefin ALTINA, yukarı taşırken ÜSTÜNE düşer.
+ */
+#[tauri::command]
+pub async fn move_task(
+    state: State<'_, AppState>,
+    task_id: String,
+    target_task_id: String,
+) -> CoreResult<MutationResult> {
+    let root = vault_root(&state)?;
+    let moving = state.index.task_write_target(&task_id)?;
+    let target = state.index.task_write_target(&target_task_id)?;
+    let (from, to) = plan_task_move(&moving, &target)?;
+    require_managed(&moving.note)?;
+
+    let guard = WriteGuard {
+        expected_hash: moving.note.content_hash.clone(),
+        expected_mtime_ms: None,
+    };
+    let result = writer::move_line(&root, &moving.note.source_path, from, to, &guard)?;
+
+    resync(&state, &root, &moving.note.source_path);
+
+    Ok(MutationResult {
+        new_hash: result.new_hash,
+        note_id: note_id_of(&state, &moving.note.source_path),
+    })
+}
+
+/// İki görev AYNI notta olmalı; notlar arası taşıma yapı kararıdır (madde 8.2).
+fn plan_task_move(
+    moving: &crate::index::TaskTarget,
+    target: &crate::index::TaskTarget,
+) -> CoreResult<(u32, u32)> {
+    if moving.note.source_path != target.note.source_path {
+        return Err(CoreError::TargetMismatch);
+    }
+    Ok((moving.line_number, target.line_number))
+}
+
 /// Frontmatter alanı yazar — Anayasa madde 8.1.
 ///
 /// `value` JSON olarak gelir; desteklenen tipler madde 7 kapsamı:
@@ -236,4 +281,35 @@ fn note_id_of(state: &AppState, source_path: &str) -> String {
         .index
         .note_id_by_path(source_path)
         .unwrap_or_else(|| source_path.to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::index::{TaskTarget, WriteTarget};
+
+    fn target(path: &str, line: u32) -> TaskTarget {
+        TaskTarget {
+            note: WriteTarget {
+                source_path: path.into(),
+                managed: true,
+                content_hash: "h".into(),
+            },
+            line_number: line,
+            title: "görev".into(),
+            status: "open".into(),
+        }
+    }
+
+    #[test]
+    fn ayni_nottaki_gorevler_satir_planina_donusur() {
+        assert_eq!(plan_task_move(&target("a.md", 7), &target("a.md", 9)).unwrap(), (7, 9));
+        assert_eq!(plan_task_move(&target("a.md", 9), &target("a.md", 7)).unwrap(), (9, 7));
+    }
+
+    #[test]
+    fn notlar_arasi_tasima_reddedilir() {
+        let err = plan_task_move(&target("a.md", 3), &target("b.md", 3)).unwrap_err();
+        assert_eq!(err.code(), "target_mismatch");
+    }
 }

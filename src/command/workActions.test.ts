@@ -51,6 +51,7 @@ describe("Cmd+K — kurum aksiyonları (Sprint 3 madde 13)", () => {
   it("kurum aksiyonu doğru çalışma alanını açar", () => {
     const calls: { id: string; panel?: string }[] = [];
     const ctx: ActionContext = {
+    moveSelectedTask: () => {},
       enterLayer: () => {},
       closePalette: () => {},
       openQuickCapture: () => {},

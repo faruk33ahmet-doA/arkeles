@@ -145,61 +145,82 @@ pub fn find_action(id: &str) -> Option<&'static ActionDef> {
 }
 
 /*
- * Hermes'in bildirdiklerinden YETENEK TÜRETME.
+ * YETENEK OKUMA — Anayasa madde 18.2. SPRINT 5'TE DÜZELTİLDİ.
  *
- * Hermes yetenekleri bizim adlandırmamızla ilan etmiyor; `/api/status`
- * bileşen sağlığı ve yapılandırılmış platformlar döndürüyor. Bu fonksiyon
- * en ince adapter: Hermes'in gerçek cevabını bizim yetenek adlarımıza
- * çevirir.
+ * "ARKELÉS, Hermes'in bildirmediği yeteneği UI'da gösteremez."
  *
- * VARSAYIM YAPMAZ: Hermes açıkça bir `capabilities` dizisi döndürüyorsa O
- * kullanılır. Döndürmüyorsa, ajanın çalışır olması `task.*` ailesini
- * mümkün kılar — çünkü Hermes'in TEK ve ASIL yeteneği budur: bir istem alıp
- * iş yapmak. Bunun ötesinde bir şey ÇIKARSANMAZ.
+ * SPRINT 4 İHLALİ (kaldırıldı): o sürüm, Hermes açıkça yetenek listesi
+ * döndürmediğinde "ajan sağlıklı → istem aksiyonları muhtemelen mümkün"
+ * diye DÖRT yetenek VARSAYIYORDU. Bu, sağlık bilgisini (erişilebilirlik)
+ * yetki bilgisiyle (yetenek) karıştırmaktı ve madde 18.2'yi doğrudan
+ * ihlal ediyordu.
+ *
+ * ŞİMDİKİ KURAL — tek kaynak, çıkarsama yok:
+ *   Hermes cevabında açık bir `capabilities` dizisi VARSA → o kullanılır.
+ *   YOKSA → boş liste. Semantik aksiyonlar görünmez.
+ *
+ * Sağlık (`gateway.running`, `components.*.status`) burada OKUNMAZ bile —
+ * okunursa biri ileride onu tekrar yeteneğe çevirmeye çalışır.
  */
-pub fn derive_capabilities(status: &serde_json::Value) -> Vec<String> {
-    // 1) Hermes açıkça ilan ediyorsa onu kullan (ileri uyumluluk).
-    if let Some(list) = status.get("capabilities").and_then(|v| v.as_array()) {
-        let declared: Vec<String> = list
-            .iter()
-            .filter_map(|v| v.as_str())
-            .map(str::to_string)
-            .collect();
-        if !declared.is_empty() {
-            return declared;
-        }
-    }
-
-    // 2) Aksi halde: ajan sağlıklıysa istem tabanlı aksiyonlar mümkündür.
-    let agent_ok = status
-        .get("components")
-        .and_then(|c| c.as_object())
-        .map(|components| {
-            components.values().any(|v| {
-                v.get("status")
-                    .and_then(|s| s.as_str())
-                    .is_some_and(|s| s == "ok" || s == "healthy" || s == "running")
-            })
+pub fn declared_capabilities(status: &serde_json::Value) -> Vec<String> {
+    status
+        .get("capabilities")
+        .and_then(|v| v.as_array())
+        .map(|list| {
+            list.iter()
+                .filter_map(|v| v.as_str())
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .map(str::to_string)
+                .collect()
         })
-        .unwrap_or(false);
+        .unwrap_or_default()
+}
 
-    let gateway_ok = status
-        .get("gateway")
-        .and_then(|g| g.get("running"))
-        .and_then(serde_json::Value::as_bool)
-        .unwrap_or(false);
+/*
+ * GATEWAY YETENEKLERİ — Sprint 5.
+ *
+ * Hermes'in gerçek ilan kanalı `gateway.capabilities` RPC'sidir; cevap
+ * `{ad: bool}` sözlüğüdür (canlı 0.21.0: yalnız
+ * `per_session_exclusive_submit`). Yalnız AÇIKÇA `true` olan adlar
+ * ilan sayılır — yine ÇIKARSAMA YOK.
+ */
+pub fn declared_flags(result: &serde_json::Value) -> Vec<String> {
+    result
+        .as_object()
+        .map(|map| {
+            map.iter()
+                .filter(|(_, value)| value.as_bool() == Some(true))
+                .map(|(name, _)| name.trim().to_string())
+                .filter(|name| !name.is_empty())
+                .collect()
+        })
+        .unwrap_or_default()
+}
 
-    if agent_ok || gateway_ok {
-        // Bu dördü tek bir mekanizmanın (ajana istem gönderme) yüzleridir.
-        return vec![
-            "task.execute".into(),
-            "note.create".into(),
-            "report.create".into(),
-            "analysis.create".into(),
-        ];
+/*
+ * İSTEM METNİ — Sprint 5.
+ *
+ * Gerçek Hermes'in iş kabul eden yüzeyi serbest metin istemidir
+ * (`prompt.submit`); yapısal "aksiyon" parametresi YOKTUR. Aksiyon ve
+ * çalışma alanı bu yüzden metnin başlığına yazılır. İkisi de allowlist'ten
+ * gelir; kullanıcı metni hiçbir komut satırına girmez, düz metin gider.
+ */
+pub fn session_title(action: &ActionDef, workspace: Option<&str>) -> String {
+    match workspace {
+        Some(workspace) => format!("ARKELÉS · {} · {workspace}", action.label),
+        None => format!("ARKELÉS · {}", action.label),
     }
+}
 
-    Vec::new()
+pub fn prompt_for(action: &ActionDef, workspace: Option<&str>, input: &str) -> String {
+    let mut text = format!("[ARKELÉS isteği — {}]\n", action.label);
+    if let Some(workspace) = workspace {
+        text.push_str(&format!("Çalışma alanı: {workspace}\n"));
+    }
+    text.push('\n');
+    text.push_str(input.trim());
+    text
 }
 
 #[cfg(test)]
@@ -227,43 +248,79 @@ mod tests {
     }
 
     #[test]
-    fn hermes_acikca_ilan_ederse_o_kullanilir() {
+    fn acikca_ilan_edilen_yetenek_kullanilir() {
         let status = json!({"capabilities": ["pdf.create", "telegram.send"]});
-        assert_eq!(derive_capabilities(&status), vec!["pdf.create", "telegram.send"]);
+        assert_eq!(declared_capabilities(&status), vec!["pdf.create", "telegram.send"]);
     }
 
+    /*
+     * GERİLEME TESTİ — Sprint 4 anayasa ihlali.
+     *
+     * Sağlıklı ajan / çalışan gateway YETENEK DEĞİLDİR. Bu testler o
+     * çıkarsamanın geri gelmesini engeller (madde 18.2).
+     */
     #[test]
-    fn saglikli_bilesen_istem_yeteneklerini_acar() {
+    fn saglikli_ajan_yetenek_uretmez() {
         let status = json!({"components": {"agent": {"status": "ok"}}});
-        let caps = derive_capabilities(&status);
-        assert!(caps.contains(&"task.execute".to_string()));
-        assert!(caps.contains(&"report.create".to_string()));
+        assert!(declared_capabilities(&status).is_empty());
     }
 
     #[test]
-    fn calisan_gateway_de_yeterlidir() {
+    fn calisan_gateway_yetenek_uretmez() {
         let status = json!({"gateway": {"running": true}});
-        assert!(derive_capabilities(&status).contains(&"task.execute".to_string()));
+        assert!(declared_capabilities(&status).is_empty());
     }
 
     #[test]
-    fn saglik_yoksa_yetenek_yok() {
-        // Madde 18.2: bildirilmeyen yetenek arayüzde HİÇ görünmez.
-        assert!(derive_capabilities(&json!({})).is_empty());
-        assert!(derive_capabilities(&json!({"components": {"agent": {"status": "down"}}})).is_empty());
-        assert!(derive_capabilities(&json!({"gateway": {"running": false}})).is_empty());
+    fn saglik_ve_bos_liste_birlikte_de_yetenek_uretmez() {
+        let status = json!({
+            "capabilities": [],
+            "gateway": {"running": true},
+            "components": {"agent": {"status": "ok"}}
+        });
+        assert!(declared_capabilities(&status).is_empty());
     }
 
     #[test]
-    fn bos_capabilities_dizisi_saglik_yoluna_duser() {
-        let status = json!({"capabilities": [], "gateway": {"running": true}});
-        assert!(derive_capabilities(&status).contains(&"task.execute".to_string()));
+    fn dizge_olmayan_ve_bos_ogeler_atlanir() {
+        let status = json!({"capabilities": ["task.execute", 5, null, "", "  "]});
+        assert_eq!(declared_capabilities(&status), vec!["task.execute"]);
     }
 
     #[test]
     fn bozuk_status_panik_yapmaz() {
         for value in [json!(null), json!("metin"), json!(5), json!([1, 2])] {
-            assert!(derive_capabilities(&value).is_empty());
+            assert!(declared_capabilities(&value).is_empty());
         }
+    }
+
+    #[test]
+    fn gateway_bayraklari_yalniz_true_olanlar() {
+        let flags = declared_flags(&json!({
+            "per_session_exclusive_submit": true,
+            "kapali": false,
+            "dizge": "true",
+            "sayi": 1
+        }));
+        assert_eq!(flags, vec!["per_session_exclusive_submit".to_string()]);
+        assert!(declared_flags(&json!(null)).is_empty());
+        assert!(declared_flags(&json!(["task.execute"])).is_empty());
+    }
+
+    #[test]
+    fn gercek_hermes_bayragi_semantik_aksiyon_acmaz() {
+        // Canlı 0.21.0 cevabı: hiçbir allowlist aksiyonuyla eşleşmez.
+        let flags = declared_flags(&json!({"per_session_exclusive_submit": true}));
+        assert!(ACTIONS.iter().all(|a| !flags.iter().any(|f| f == a.capability)));
+    }
+
+    #[test]
+    fn istem_aksiyonu_alani_ve_metni_tasir() {
+        let action = find_action("report.create").unwrap();
+        let prompt = prompt_for(action, Some("wif"), "  Haftalık bütçe  ");
+        assert!(prompt.starts_with("[ARKELÉS isteği — Rapor oluştur]"));
+        assert!(prompt.contains("Çalışma alanı: wif"));
+        assert!(prompt.ends_with("Haftalık bütçe"));
+        assert_eq!(session_title(action, None), "ARKELÉS · Rapor oluştur");
     }
 }

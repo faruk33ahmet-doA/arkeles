@@ -10,7 +10,7 @@ Bu modül `&Connection` alır; kilit yönetimi çağırana (db.rs) aittir.
 */
 
 use std::collections::HashMap;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use rusqlite::{params, Connection, Transaction};
 
@@ -50,26 +50,29 @@ pub fn full_scan(conn: &mut Connection, vault_root: &Path) -> CoreResult<ScanRep
     let tx = conn.transaction().map_err(CoreError::IndexQuery)?;
     let mut seen_paths: Vec<String> = Vec::with_capacity(files.markdown.len());
 
-    for path in &files.markdown {
-        report.scanned += 1;
+    // Okuma + ayrıştırma paralel, yazma seri (tek yazar) — bkz. `read_batch`.
+    for batch in files.markdown.chunks(READ_BATCH) {
+        for (path, parsed) in batch.iter().zip(read_batch(vault_root, batch)) {
+            report.scanned += 1;
 
-        let Some(note) = reader::read_note(vault_root, path) else {
-            // Sprint 1 borcu #4: sessizce atlamıyoruz — sayıyoruz ve logluyoruz.
-            // Madde 19.5: yalnız YOL loglanır, içerik asla.
-            report.unreadable += 1;
-            eprintln!("[index] okunamadı: {}", path.display());
-            continue;
-        };
-        seen_paths.push(note.source_path.clone());
+            let Some(note) = parsed else {
+                // Sprint 1 borcu #4: sessizce atlamıyoruz — sayıyoruz ve logluyoruz.
+                // Madde 19.5: yalnız YOL loglanır, içerik asla.
+                report.unreadable += 1;
+                eprintln!("[index] okunamadı: {}", path.display());
+                continue;
+            };
+            seen_paths.push(note.source_path.clone());
 
-        // Madde 15.6: hash aynıysa hiç dokunmayız.
-        if existing.get(&note.source_path).is_some_and(|h| h == &note.content_hash) {
-            report.unchanged += 1;
-            continue;
+            // Madde 15.6: hash aynıysa hiç dokunmayız.
+            if existing.get(&note.source_path).is_some_and(|h| h == &note.content_hash) {
+                report.unchanged += 1;
+                continue;
+            }
+
+            upsert_note(&tx, &note)?;
+            report.reindexed += 1;
         }
-
-        upsert_note(&tx, &note)?;
-        report.reindexed += 1;
     }
 
     report.removed = remove_missing(&tx, &seen_paths)?;
@@ -150,9 +153,70 @@ fn load_hashes(conn: &Connection) -> CoreResult<HashMap<String, String>> {
     Ok(out)
 }
 
+/// Bellek sınırı: bir seferde ayrıştırılıp yazılmayı bekleyen en fazla not.
+const READ_BATCH: usize = 512;
+
+/*
+ * Okuma + ayrıştırma — Sprint 5 yük testi (madde 34.1).
+ *
+ * Dosya okumak, hash'lemek ve ayrıştırmak saf iştir; birbirinden bağımsız
+ * dosyalar çekirdeklere dağıtılır. SQLite yazımı TEK YAZAR (WAL) olduğu için
+ * seri kalır. Sonuç girdiyle AYNI SIRADADIR — bir iş parçacığı çökse bile o
+ * dilimin dosyaları "okunamadı" sayılır, sonuçlar kaymaz.
+ */
+fn read_batch(vault_root: &Path, paths: &[PathBuf]) -> Vec<Option<ParsedNote>> {
+    let workers = std::thread::available_parallelism()
+        .map(|n| n.get())
+        .unwrap_or(1)
+        .min(8);
+    if workers <= 1 || paths.len() < 32 {
+        return paths.iter().map(|path| reader::read_note(vault_root, path)).collect();
+    }
+
+    let size = paths.len().div_ceil(workers);
+    std::thread::scope(|scope| {
+        let handles: Vec<_> = paths
+            .chunks(size)
+            .map(|part| {
+                let handle = scope.spawn(move || {
+                    part.iter()
+                        .map(|path| reader::read_note(vault_root, path))
+                        .collect::<Vec<_>>()
+                });
+                (part.len(), handle)
+            })
+            .collect();
+
+        handles
+            .into_iter()
+            .flat_map(|(len, handle)| {
+                handle.join().unwrap_or_else(|_| (0..len).map(|_| None).collect())
+            })
+            .collect()
+    })
+}
+
 fn upsert_note(tx: &Transaction<'_>, note: &ParsedNote) -> CoreResult<()> {
-    // Aynı yolda eski kayıt varsa (kimliği değişmiş olabilir) önce temizle.
-    delete_by_path(tx, &note.source_path)?;
+    /*
+     * Bu not index'te var mıydı (aynı kimlik ya da aynı yol)? Yoksa türetilmiş
+     * satırları (görev, bağlantı, FTS) silmeye gerek YOK — yeni notun hiçbiri
+     * olamaz. `notes_fts.note_id` indekssiz olduğundan koşulsuz silme her
+     * notta TÜM FTS tablosunu tarıyordu: 2.000 notta kurulum bütçesini
+     * (madde 34.1) aşan kare maliyet. Var olan notlarda davranış AYNI.
+     */
+    let known: bool = tx
+        .prepare_cached(
+            "SELECT EXISTS(SELECT 1 FROM notes WHERE id = ?1 OR source_path = ?2)",
+        )
+        .and_then(|mut stmt| {
+            stmt.query_row(params![note.id, note.source_path], |row| row.get(0))
+        })
+        .map_err(CoreError::IndexQuery)?;
+
+    if known {
+        // Aynı yolda eski kayıt varsa (kimliği değişmiş olabilir) önce temizle.
+        delete_by_path(tx, &note.source_path)?;
+    }
 
     let frontmatter = serde_json::to_string(&note.frontmatter).unwrap_or_else(|_| "{}".into());
     let created_at = note
@@ -161,7 +225,8 @@ fn upsert_note(tx: &Transaction<'_>, note: &ParsedNote) -> CoreResult<()> {
         .and_then(|v| v.as_str())
         .map(str::to_string);
 
-    tx.execute(
+    exec(
+        tx,
         "INSERT INTO notes (id, source_path, title, managed, content_hash, modified_at,
                             created_at, frontmatter, workspace, kind, event_date)
          VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)
@@ -189,15 +254,15 @@ fn upsert_note(tx: &Transaction<'_>, note: &ParsedNote) -> CoreResult<()> {
             note.kind.as_str(),
             note.event_date,
         ],
-    )
-    .map_err(CoreError::IndexQuery)?;
+    )?;
 
     // Görevler ve bağlantılar her seferinde yeniden türetilir — türetilmiş
     // veri (madde 9.2), birikmemesi için önce silinir.
-    tx.execute("DELETE FROM tasks WHERE note_id = ?1", params![note.id])
-        .map_err(CoreError::IndexQuery)?;
-    tx.execute("DELETE FROM links WHERE source_id = ?1", params![note.id])
-        .map_err(CoreError::IndexQuery)?;
+    if known {
+        exec(tx, "DELETE FROM tasks WHERE note_id = ?1", params![note.id])?;
+        exec(tx, "DELETE FROM links WHERE source_id = ?1", params![note.id])?;
+        exec(tx, "DELETE FROM notes_fts WHERE note_id = ?1", params![note.id])?;
+    }
 
     for task in &note.tasks {
         // Görev kimliği: not + satır. Satır kayarsa kimlik değişir — kabul
@@ -210,7 +275,8 @@ fn upsert_note(tx: &Transaction<'_>, note: &ParsedNote) -> CoreResult<()> {
                 .map(str::to_string)
         });
 
-        tx.execute(
+        exec(
+            tx,
             "INSERT INTO tasks (id, note_id, line_number, title, status, workspace, due)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
             params![
@@ -222,27 +288,24 @@ fn upsert_note(tx: &Transaction<'_>, note: &ParsedNote) -> CoreResult<()> {
                 note.workspace,
                 due,
             ],
-        )
-        .map_err(CoreError::IndexQuery)?;
+        )?;
     }
 
     for target in &note.links {
         // Aynı hedefe iki bağlantı bir ilişkidir — PRIMARY KEY çakışması
         // hata değil, beklenen durum.
-        tx.execute(
+        exec(
+            tx,
             "INSERT OR IGNORE INTO links (source_id, target_ref) VALUES (?1, ?2)",
             params![note.id, target],
-        )
-        .map_err(CoreError::IndexQuery)?;
+        )?;
     }
 
-    tx.execute("DELETE FROM notes_fts WHERE note_id = ?1", params![note.id])
-        .map_err(CoreError::IndexQuery)?;
-    tx.execute(
+    exec(
+        tx,
         "INSERT INTO notes_fts (note_id, title, body) VALUES (?1, ?2, ?3)",
         params![note.id, note.title, note.body],
-    )
-    .map_err(CoreError::IndexQuery)?;
+    )?;
 
     Ok(())
 }
@@ -253,7 +316,7 @@ fn delete_by_path(tx: &Transaction<'_>, source_path: &str) -> CoreResult<usize> 
     // yukarı fırlatılır (Sprint 1 borcu #4).
     let ids: Vec<String> = {
         let mut stmt = tx
-            .prepare("SELECT id FROM notes WHERE source_path = ?1")
+            .prepare_cached("SELECT id FROM notes WHERE source_path = ?1")
             .map_err(CoreError::IndexQuery)?;
         let rows = stmt
             .query_map(params![source_path], |row| row.get::<_, String>(0))
@@ -263,15 +326,10 @@ fn delete_by_path(tx: &Transaction<'_>, source_path: &str) -> CoreResult<usize> 
     };
 
     for id in &ids {
-        tx.execute("DELETE FROM notes_fts WHERE note_id = ?1", params![id])
-            .map_err(CoreError::IndexQuery)?;
+        exec(tx, "DELETE FROM notes_fts WHERE note_id = ?1", params![id])?;
     }
     // tasks ve links, notes'a ON DELETE CASCADE ile bağlı.
-    let removed = tx
-        .execute("DELETE FROM notes WHERE source_path = ?1", params![source_path])
-        .map_err(CoreError::IndexQuery)?;
-
-    Ok(removed)
+    exec(tx, "DELETE FROM notes WHERE source_path = ?1", params![source_path])
 }
 
 /// Vault'ta artık bulunmayan notları index'ten düşürür.
@@ -309,8 +367,7 @@ fn sync_documents(
     vault_root: &std::path::Path,
     paths: &[std::path::PathBuf],
 ) -> CoreResult<()> {
-    tx.execute("DELETE FROM documents", [])
-        .map_err(CoreError::IndexQuery)?;
+    exec(tx, "DELETE FROM documents", [])?;
 
     for path in paths {
         let Some(info) = reader::read_document(vault_root, path) else {
@@ -319,7 +376,8 @@ fn sync_documents(
         // Kimlik yoldan türetilir: belgenin frontmatter'ı yoktur, ULID taşıyamaz.
         let id = crate::vault::id::transient_id(&info.source_path);
 
-        tx.execute(
+        exec(
+            tx,
             "INSERT OR REPLACE INTO documents
              (id, source_path, file_name, extension, size_bytes, modified_at)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
@@ -331,19 +389,26 @@ fn sync_documents(
                 info.size_bytes as i64,
                 info.modified_at,
             ],
-        )
-        .map_err(CoreError::IndexQuery)?;
+        )?;
     }
 
     Ok(())
 }
 
 fn set_meta(tx: &Transaction<'_>, key: &str, value: &str) -> CoreResult<()> {
-    tx.execute(
+    exec(
+        tx,
         "INSERT INTO index_meta (key, value) VALUES (?1, ?2)
          ON CONFLICT(key) DO UPDATE SET value = excluded.value",
         params![key, value],
-    )
-    .map_err(CoreError::IndexQuery)?;
+    )?;
     Ok(())
+}
+
+/// Tekrarlanan ifadeler bağlantının önbelleğinden gelir: satır başına yeniden
+/// hazırlama 2.000 notta ~30.000 gereksiz `prepare` demekti (Sprint 5).
+fn exec(tx: &Transaction<'_>, sql: &str, params: impl rusqlite::Params) -> CoreResult<usize> {
+    tx.prepare_cached(sql)
+        .and_then(|mut stmt| stmt.execute(params))
+        .map_err(CoreError::IndexQuery)
 }

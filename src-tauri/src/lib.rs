@@ -74,6 +74,7 @@ pub fn run() {
 
             // Anayasa madde 15.3: index app-data dizininde, vault'un İÇİNDE DEĞİL.
             let index = index::IndexHandle::open(app.handle())?;
+            index.recover_orphan_jobs();
 
             let vault_path = config.vault_path();
 
@@ -116,15 +117,13 @@ pub fn run() {
             }
 
             /*
-             * İş sürücüsü — Sprint 4 madde 6, 21.
+             * İş sürücüsü — Sprint 4 madde 6, 21; Sprint 5.
              *
-             * Kuyruktaki işleri Hermes'e iletir ve çalışanların durumunu
-             * tazeler. Kendi iş parçacığında çalışır: UI ASLA Hermes'i
-             * beklemez (madde 21).
-             *
-             * 2 sn aralık: madde 35.1 (gereksiz iş yasak) ile kullanıcının
-             * "iş ilerliyor mu" beklentisi arasındaki denge. Yoklama
-             * fırtınası YOK (Sprint 4 madde 10).
+             * Hermes YOKLANMAZ. Kuyruktaki her iş için ayrı bir iş parçacığı
+             * turu açar ve Hermes'in kendi olay akışını (`message.complete`,
+             * aynı WebSocket) bekler — sonuç geldiği anda deftere yazılır.
+             * Bu döngü yalnız yerel kuyruğa bakar ve defter değiştiyse
+             * arayüze TEK olay yayınlar. Boşta maliyeti: bir SQLite okuması.
              */
             {
                 let handle = app.handle().clone();
@@ -133,7 +132,16 @@ pub fn run() {
                     let Some(state) = handle.try_state::<AppState>() else {
                         return;
                     };
-                    if state.index.drive_jobs() {
+
+                    while let Some(job_id) = state.index.claim_job() {
+                        let worker = handle.clone();
+                        std::thread::spawn(move || match worker.try_state::<AppState>() {
+                            Some(state) => state.index.run_job(&job_id),
+                            None => hermes::jobs::release(&job_id),
+                        });
+                    }
+
+                    if hermes::jobs::take_dirty() {
                         use tauri::Emitter;
                         let _ = handle.emit(JOBS_CHANGED_EVENT, ());
                     }
@@ -155,6 +163,7 @@ pub fn run() {
             ipc::mutation_cmds::set_task_status,
             ipc::mutation_cmds::set_frontmatter_field,
             ipc::mutation_cmds::toggle_tag,
+            ipc::mutation_cmds::move_task,
             ipc::mutation_cmds::quick_capture,
             ipc::mutation_cmds::inbox_status,
             // İş modülü — Sprint 3. Kuruma özel komut YOK.

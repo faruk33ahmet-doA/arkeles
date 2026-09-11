@@ -38,18 +38,25 @@ interface WorkState {
   panel: WorkPanel;
   /** Açık not detayı. Panelin ÜSTÜNDE bir alt yüzeydir. */
   noteId: string | null;
+  /**
+   * Not detayında seçili görev — Sprint 5 madde 8. Sürükle-bırakın klavye
+   * karşılığı (⌥↑/⌥↓ ve komut paleti) bu görevi taşır.
+   */
+  selectedTaskId: string | null;
 
   openWorkspace: (id: string) => void;
   closeWorkspace: () => void;
   setPanel: (panel: WorkPanel) => void;
   openNote: (noteId: string) => void;
   closeNote: () => void;
+  selectTask: (taskId: string | null) => void;
 }
 
 export const useWorkStore = create<WorkState>((set) => ({
   workspaceId: null,
   panel: "overview",
   noteId: null,
+  selectedTaskId: null,
 
   openWorkspace: (id) =>
     set((state) =>
@@ -57,14 +64,18 @@ export const useWorkStore = create<WorkState>((set) => ({
         ? state
         : // Yeni kuruma girerken önceki panelin/notun taşınması kafa
           // karıştırırdı: her kurum Genel Bakış'tan başlar (madde 3).
-          { workspaceId: id, panel: "overview", noteId: null },
+          { workspaceId: id, panel: "overview", noteId: null, selectedTaskId: null },
     ),
 
-  closeWorkspace: () => set({ workspaceId: null, panel: "overview", noteId: null }),
+  closeWorkspace: () =>
+    set({ workspaceId: null, panel: "overview", noteId: null, selectedTaskId: null }),
 
   setPanel: (panel) =>
-    set((state) => (state.panel === panel ? state : { panel, noteId: null })),
+    set((state) =>
+      state.panel === panel ? state : { panel, noteId: null, selectedTaskId: null },
+    ),
 
-  openNote: (noteId) => set({ noteId }),
-  closeNote: () => set({ noteId: null }),
+  openNote: (noteId) => set({ noteId, selectedTaskId: null }),
+  closeNote: () => set({ noteId: null, selectedTaskId: null }),
+  selectTask: (selectedTaskId) => set({ selectedTaskId }),
 }));

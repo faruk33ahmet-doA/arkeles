@@ -9,7 +9,7 @@ Hermes sağlık ve özet — Anayasa madde 18.
 use rusqlite::Connection;
 
 use crate::error::CoreResult;
-use crate::hermes::{contract, http, jobs};
+use crate::hermes::{contract, http, jobs, rpc};
 use crate::types::{HermesHealth, HermesSummary};
 
 impl HermesHealth {
@@ -41,9 +41,19 @@ pub fn health() -> HermesHealth {
      * Bu durumda `reachable: true` ama `capabilities: []` döneriz: kullanıcı
      * Hermes'in çalıştığını görür, semantik aksiyonlar görünmez (madde 18.2).
      */
-    let capabilities = http::get_json("/api/status")
-        .map(|status| contract::derive_capabilities(&status))
+    let mut capabilities = http::get_json("/api/status")
+        .map(|status| contract::declared_capabilities(&status))
         .unwrap_or_default();
+
+    // 3) Gateway'in kendi ilanı (Sprint 5, canlı doğrulandı). Token yoksa
+    //    veya kanal açılamazsa boş — sağlık yine `reachable: true` kalır.
+    if let Ok(flags) = rpc::call("gateway.capabilities", serde_json::json!({})) {
+        for flag in contract::declared_flags(&flags) {
+            if !capabilities.contains(&flag) {
+                capabilities.push(flag);
+            }
+        }
+    }
 
     HermesHealth { reachable: true, version, capabilities }
 }
@@ -61,4 +71,19 @@ pub fn summary(conn: &Connection, health: HermesHealth) -> CoreResult<HermesSumm
         failed_today,
         last_completed: jobs::last_completed(conn)?,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    /// Sprint 5: kullanıcının canlı bulgusu — çalışan 0.21.0 "ulaşılamıyor"
+    /// görünüyordu. ARKELÉS'in TAM sağlık yolunu gerçek Hermes'e karşı koşar.
+    ///
+    ///   cargo test canli_saglik -- --ignored --nocapture
+    #[test]
+    #[ignore = "çalışan yerel Hermes gerektirir"]
+    fn canli_saglik() {
+        let health = super::health();
+        eprintln!("CANLI SAĞLIK: {health:?}");
+        assert!(health.reachable, "çalışan Hermes ulaşılamaz sınıflandı");
+    }
 }

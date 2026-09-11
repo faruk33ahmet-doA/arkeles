@@ -33,7 +33,7 @@ export default function WorkLayer() {
         ) : (
           <EmptyState
             message={`${active?.label ?? "Bu kurum"} için yüzey henüz hazır değil.`}
-            hint="Sırası geldiğinde WIF ve GEN ile aynı yapıyı kullanacak."
+            hint="Hazır olduğunda diğer kurumlarla aynı yapıyı kullanacak."
           />
         )}
       </LayerHost>

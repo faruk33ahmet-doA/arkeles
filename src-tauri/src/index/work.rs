@@ -311,21 +311,32 @@ pub fn note_detail(conn: &Connection, note_id: &str) -> CoreResult<NoteDetail> {
         "tasks/note",
     );
 
-    // --- Giden bağlantılar (madde 11) ---
+    /*
+     * --- Giden bağlantılar (madde 11) — Sprint 5: NOT ve BELGE ayrı ---
+     *
+     * Bir hedef önce not olarak, bulunamazsa index'teki BELGE olarak
+     * çözülür (`[[rapor.pdf]]`, `![[raporlar/rapor.pdf]]`). Belge yolu
+     * arayüze GİTMEZ; yalnız belge kimliği gider ve açma işi mevcut güvenli
+     * çözücüden (`open_document` → index'teki yol) geçer — madde 19.
+     * Alt sorgu + LIMIT 1: aynı ada sahip iki kayıt satırı ÇOĞALTMAZ.
+     */
     let mut out_stmt = conn
         .prepare(
-            "SELECT l.target_ref, n.id
+            "SELECT l.target_ref,
+                    (SELECT n.id FROM notes n
+                      WHERE n.title = l.target_ref OR n.source_path = l.target_ref || '.md'
+                      ORDER BY n.source_path LIMIT 1),
+                    (SELECT d.id FROM documents d
+                      WHERE d.source_path = l.target_ref OR d.file_name = l.target_ref
+                      ORDER BY d.source_path LIMIT 1)
              FROM links l
-             LEFT JOIN notes n
-               ON n.title = l.target_ref
-               OR n.source_path = l.target_ref || '.md'
              WHERE l.source_id = ?1
              ORDER BY l.target_ref ASC",
         )
         .map_err(CoreError::IndexQuery)?;
     let (outgoing, _) = collect_rows(
         out_stmt
-            .query_map(params![note_id], link_row)
+            .query_map(params![note_id], outgoing_row)
             .map_err(CoreError::IndexQuery)?,
         "links/outgoing",
     );
@@ -405,5 +416,17 @@ fn link_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<NoteLink> {
     Ok(NoteLink {
         title: row.get(0)?,
         note_id: row.get(1)?,
+        document_id: None,
+    })
+}
+
+/// Giden bağlantı: not bulunduysa belge ARANMAZ — bir hedef tek türdür.
+fn outgoing_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<NoteLink> {
+    let note_id: Option<String> = row.get(1)?;
+    let document_id: Option<String> = if note_id.is_some() { None } else { row.get(2)? };
+    Ok(NoteLink {
+        title: row.get(0)?,
+        note_id,
+        document_id,
     })
 }

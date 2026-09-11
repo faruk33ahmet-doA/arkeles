@@ -18,7 +18,9 @@ mod work;
 mod query_test;
 #[cfg(test)]
 mod work_test;
+#[cfg(test)]
+mod stress_test;
 
 pub use builder::ScanReport;
-pub use query::WriteTarget;
+pub use query::{TaskTarget, WriteTarget};
 pub use db::IndexHandle;

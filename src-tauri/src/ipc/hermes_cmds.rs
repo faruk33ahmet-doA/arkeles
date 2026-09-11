@@ -105,8 +105,14 @@ pub fn retry_job(state: State<'_, AppState>, job_id: String) -> CoreResult<()> {
     state.index.retry_job(&job_id)
 }
 
-/// İşi iptal eder — madde 16.
+/// İşi iptal eder — madde 16. Çalışan turda Hermes'e ağ çağrısı gider;
+/// IPC iş parçacığını bloke etmemek için ayrı iş parçacığında (madde 21).
 #[tauri::command]
-pub async fn cancel_job(state: State<'_, AppState>, job_id: String) -> CoreResult<()> {
-    state.index.cancel_job(&job_id)
+pub async fn cancel_job(app: tauri::AppHandle, job_id: String) -> CoreResult<()> {
+    tauri::async_runtime::spawn_blocking(move || {
+        use tauri::Manager;
+        app.state::<AppState>().index.cancel_job(&job_id)
+    })
+    .await
+    .unwrap_or(Err(crate::error::CoreError::HermesUnreachable))
 }

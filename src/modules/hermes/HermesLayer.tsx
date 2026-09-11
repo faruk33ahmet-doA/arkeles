@@ -65,9 +65,11 @@ export default function HermesLayer() {
             <StatusDot
               status={summary?.reachable ? "online" : "offline"}
               label={
-                summary?.reachable
-                  ? `Bağlı${summary.version ? ` · ${summary.version}` : ""}`
-                  : "Ulaşılamıyor"
+                summary === undefined
+                  ? "Yoklanıyor"
+                  : summary.reachable
+                    ? `Bağlı${summary.version ? ` · ${summary.version}` : ""}`
+                    : "Ulaşılamıyor"
               }
             />
             {/* Madde 11.5: SAYIM. Analiz değil. */}

@@ -1,17 +1,18 @@
 import { useState } from "react";
 import { useCancelJob, useRetryJob } from "@/data/hooks/useHermes";
-import { useWorkStore } from "@/state/workStore";
-import { openDocument } from "@/services/work.service";
 import { cn } from "@/lib/cn";
 import type { Job } from "@/lib/generated";
 
 /*
- * Bir iş satırı — Sprint 4 madde 3, 7, 8, 15, 16.
+ * Bir iş satırı — Sprint 4 madde 3, 7, 15, 16.
  *
  * 7   SAHTE PROGRESS YOK: Hermes yüzde vermiyorsa yalnız durum adı görünür.
  * 15  Hata sessizce kaybolmaz ama KIRMIZI ALARM da yapılmaz; sönük amber.
  * 16  İptal yalnız queued/running işte görünür.
- * 8   Sonuç referansları tıklanabilir: not → not detayı, belge → OS.
+ *
+ * Sonuç referansı satırı YOK (Sprint 5): gerçek Hermes yapısal çıktı
+ * bildirmiyor. Hermes'in yazdığı notlar vault'a düşer ve iş bitince vault
+ * tazelenir — ARKELÉS sonuç UYDURMAZ (madde 8).
  */
 
 const STATUS_LABEL: Record<string, string> = {
@@ -38,26 +39,10 @@ const STATUS_TONE: Record<string, string> = {
 export function JobRow({ job }: { job: Job }) {
   const retry = useRetryJob();
   const cancel = useCancelJob();
-  const openNote = useWorkStore((s) => s.openNote);
-  const openWorkspace = useWorkStore((s) => s.openWorkspace);
   const [detail, setDetail] = useState(false);
-  const [openError, setOpenError] = useState<string | null>(null);
 
   const isActive = job.status === "queued" || job.status === "running";
   const label = STATUS_LABEL[job.status] ?? job.status;
-
-  const openOutput = (kind: string, reference: string) => {
-    setOpenError(null);
-    if (kind === "note") {
-      if (job.workspace) openWorkspace(job.workspace);
-      openNote(reference);
-      return;
-    }
-    if (kind === "document") {
-      // Mevcut güvenli resolver — yol index'ten doğrulanır (madde 19).
-      openDocument(reference).catch(() => setOpenError("Dosya açılamadı."));
-    }
-  };
 
   return (
     <div className="flex flex-col gap-2 py-3">
@@ -84,34 +69,6 @@ export function JobRow({ job }: { job: Job }) {
           </span>
         </div>
       </div>
-
-      {/* Sonuç referansları — madde 8. Sonuç yoksa hiçbir şey görünmez. */}
-      {job.outputs.length > 0 ? (
-        <div className="flex flex-wrap gap-2">
-          {job.outputs.map((output) => (
-            <button
-              key={`${output.kind}-${output.reference}`}
-              type="button"
-              disabled={output.kind === "external"}
-              onClick={() => openOutput(output.kind, output.reference)}
-              className={cn(
-                "rounded-sm border border-border-subtle px-2 py-1 text-xs",
-                "transition-colors duration-fast ease-out outline-none",
-                "focus-visible:ring-1 focus-visible:ring-border-strong",
-                output.kind === "external"
-                  ? "cursor-default text-text-tertiary"
-                  : "text-text-secondary hover:bg-surface-3 hover:text-text-primary",
-              )}
-            >
-              {output.label}
-            </button>
-          ))}
-        </div>
-      ) : null}
-
-      {openError ? (
-        <p className="text-xs text-status-attention">{openError}</p>
-      ) : null}
 
       {/* Madde 15: hata görünür ama akışı kesmez. */}
       {job.status === "failed" && detail && job.errorMessage ? (

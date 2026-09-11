@@ -138,8 +138,8 @@ fn yedi_kurum_da_listelenir() {
     let list = work::list_workspaces(&conn).unwrap();
     assert_eq!(list.len(), 7, "madde 36.1: dock ve İş ekranı hepsini gösterir");
 
-    let active: Vec<&str> = list.iter().filter(|w| w.active).map(|w| w.id.as_str()).collect();
-    assert_eq!(active, vec!["wif", "gen"]);
+    // Sprint 5: yedisi de aynı şablonla aktif — kuruma özel bileşen yok.
+    assert!(list.iter().all(|w| w.active), "yedi kurumun hepsi aktif olmalı");
 }
 
 #[test]
@@ -487,4 +487,55 @@ fn makine_kaydi_kurum_sayimina_dahil_ama_listeye_degil() {
         .find(|w| w.id == "wif")
         .unwrap();
     assert_eq!(wif.note_count, 1);
+}
+
+// ===========================================================================
+// BELGE BAĞLANTILARI — Sprint 5 madde 7
+// ===========================================================================
+
+#[test]
+fn belge_baglantisi_nottan_ayri_cozulur() {
+    let conn = memory_index();
+    note(&conn, "n1", "Kaynak", Some("wif"), "note", true, "2026-09-10T10:00:00Z", "{}");
+    note(&conn, "n2", "Hedef Not", Some("wif"), "note", true, "2026-09-10T10:00:00Z", "{}");
+    conn.execute(
+        "INSERT INTO documents (id, source_path, file_name, extension, size_bytes, modified_at)
+         VALUES ('d1', 'raporlar/bütçe.pdf', 'bütçe.pdf', 'pdf', 10, '2026-09-10T10:00:00Z')",
+        [],
+    )
+    .unwrap();
+    for target in ["Hedef Not", "bütçe.pdf", "raporlar/bütçe.pdf", "Olmayan"] {
+        conn.execute(
+            "INSERT INTO links (source_id, target_ref) VALUES ('n1', ?1)",
+            rusqlite::params![target],
+        )
+        .unwrap();
+    }
+
+    let detail = work::note_detail(&conn, "n1").unwrap();
+    assert_eq!(detail.outgoing.len(), 4, "satır çoğalmamalı");
+    let by = |title: &str| detail.outgoing.iter().find(|l| l.title == title).unwrap();
+
+    assert_eq!(by("Hedef Not").note_id.as_deref(), Some("n2"));
+    assert!(by("Hedef Not").document_id.is_none());
+
+    // Dosya adı da tam yol da aynı belgeye düşer; yol ARAYÜZE GİTMEZ.
+    assert_eq!(by("bütçe.pdf").document_id.as_deref(), Some("d1"));
+    assert!(by("bütçe.pdf").note_id.is_none());
+    assert_eq!(by("raporlar/bütçe.pdf").document_id.as_deref(), Some("d1"));
+
+    let missing = by("Olmayan");
+    assert!(missing.note_id.is_none() && missing.document_id.is_none());
+}
+
+#[test]
+fn gelen_baglantilar_hic_belge_tasimaz() {
+    let conn = memory_index();
+    note(&conn, "a", "A", None, "note", true, "2026-09-10T10:00:00Z", "{}");
+    note(&conn, "b", "B", None, "note", true, "2026-09-10T10:00:00Z", "{}");
+    conn.execute("INSERT INTO links (source_id, target_ref) VALUES ('b', 'A')", []).unwrap();
+
+    let detail = work::note_detail(&conn, "a").unwrap();
+    assert_eq!(detail.incoming.len(), 1);
+    assert!(detail.incoming.iter().all(|l| l.document_id.is_none()));
 }

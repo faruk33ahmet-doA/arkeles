@@ -2,6 +2,7 @@ import type { LayerId } from "@/navigation/layers/types";
 import type { WorkPanel } from "@/state/workStore";
 import type { AvailableAction, Workspace } from "@/lib/generated";
 import { listLayers } from "@/navigation/layers/layerRegistry";
+import type { MoveDirection } from "@/lib/taskOrder";
 
 /*
  * Aksiyon Kaydı — Anayasa madde 27.3:
@@ -35,6 +36,8 @@ export interface Action {
   keywords?: string[];
   /** Yalnız "semantic" için: Hermes yetenek anahtarı (madde 18.2). */
   capability?: string;
+  /** Aynı aksiyonun doğrudan klavye kısayolu — palette ipucu olarak görünür. */
+  shortcut?: string;
   /** Aksiyonun kendisi. Sprint 0'da navigate dışındakiler tanımsız. */
   run?: (ctx: ActionContext) => void | Promise<void>;
 }
@@ -48,6 +51,8 @@ export interface ActionContext {
   openWorkspace: (workspaceId: string, panel?: WorkPanel) => void;
   /** Hermes aksiyon yüzeyini bir çalışma alanında açar — Sprint 4 madde 18. */
   openHermesAction: (actionId: string, workspaceId: string | null) => void;
+  /** Not detayında seçili görevi taşır — Sprint 5 madde 8. */
+  moveSelectedTask: (direction: MoveDirection) => void;
 }
 
 /** Katmanlardan otomatik türeyen navigasyon aksiyonları (madde 27.4). */
@@ -130,6 +135,33 @@ function quickCaptureAction(): Action {
 }
 
 /*
+ * Görev sırası — Sprint 5 madde 8. MEKANİK (satır taşıma, madde 8.1).
+ *
+ * Sürükle-bırakın KLAVYE karşılığı. Yalnız not detayında bir görev
+ * seçiliyken listelenir (madde 18.2: tıklanınca hiçbir şey yapmayan aksiyon
+ * yok). Görev satırındaki ⌥↑/⌥↓ da AYNI tuş eşlemesini buradan okur.
+ */
+export const TASK_MOVE_KEYS: Record<string, MoveDirection> = {
+  ArrowUp: "up",
+  ArrowDown: "down",
+};
+
+function taskMoveActions(): Action[] {
+  return (["up", "down"] as const).map((direction) => ({
+    id: `task:move-${direction}`,
+    title: direction === "up" ? "Görevi yukarı taşı" : "Görevi aşağı taşı",
+    group: "Görev",
+    kind: "mechanic" as const,
+    keywords: ["görev", "sıra", "taşı", "move", direction === "up" ? "yukarı" : "aşağı"],
+    shortcut: direction === "up" ? "⌥↑" : "⌥↓",
+    run: (ctx: ActionContext) => {
+      ctx.moveSelectedTask(direction);
+      ctx.closePalette();
+    },
+  }));
+}
+
+/*
  * Hermes aksiyonları — Sprint 4 madde 18.
  *
  * "Yalnız capability mevcutsa listelensin. Yeni paralel komut sistemi
@@ -192,11 +224,17 @@ export function getActions(options: {
   inboxAvailable: boolean;
   workspaces?: Workspace[];
   hermesActions?: AvailableAction[];
+  /** Not detayında seçili, taşınabilir bir görev var mı — Sprint 5 madde 8. */
+  taskSelected?: boolean;
 }): Action[] {
   const actions = [...navigationActions()];
 
   if (options.inboxAvailable) {
     actions.push(quickCaptureAction());
+  }
+
+  if (options.taskSelected) {
+    actions.push(...taskMoveActions());
   }
   // Sprint 3 madde 13: kurum aksiyonları listeden TÜRETİLİR, yazılmaz.
   actions.push(...workspaceActions(options.workspaces ?? []));

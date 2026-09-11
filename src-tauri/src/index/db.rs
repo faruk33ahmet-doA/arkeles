@@ -322,9 +322,18 @@ impl IndexHandle {
         crate::hermes::jobs::retry(&conn, job_id)
     }
 
+    /// İptal. Çalışan turda Hermes'e `interrupt` gider; "cancelled" durumunu
+    /// tur kanalı Hermes'ten duyunca yazar. Yazma kilidi ağ beklenirken TUTULMAZ.
     pub fn cancel_job(&self, job_id: &str) -> CoreResult<()> {
-        let conn = self.writer();
-        crate::hermes::jobs::cancel(&conn, job_id)
+        let remote = {
+            let conn = self.writer();
+            crate::hermes::jobs::cancel(&conn, job_id)?
+        };
+        if let Some(session) = remote {
+            crate::hermes::turn::interrupt(&session)?;
+        }
+        crate::hermes::jobs::mark_dirty();
+        Ok(())
     }
 
     pub fn hermes_summary(
@@ -334,37 +343,43 @@ impl IndexHandle {
         crate::hermes::summary(&self.reader(), health)
     }
 
-    /// Arka plan sürücüsü: kuyruktaki işleri gönderir, çalışanları tazeler.
-    ///
-    /// Değişiklik olduysa `true` — çağıran arayüze olay yayınlar.
-    pub fn drive_jobs(&self) -> bool {
-        let mut changed = false;
+    /// Açılışta: önceki süreçten "running" kalan işleri dürüstçe kapatır.
+    pub fn recover_orphan_jobs(&self) {
+        let _ = crate::hermes::jobs::recover_orphans(&self.writer());
+    }
 
-        let queued = {
-            let conn = self.reader();
-            crate::hermes::jobs::queued_ids(&conn).unwrap_or_default()
-        };
-        for job_id in queued {
+    /// Sürücü için: kuyruktaki bir sonraki işi sahiplenir.
+    pub fn claim_job(&self) -> Option<String> {
+        crate::hermes::jobs::claim_next(&self.reader()).ok().flatten()
+    }
+
+    /*
+     * Bir işin Hermes turunu baştan sona yürütür — BLOKLAYICI; sürücü her
+     * iş için ayrı iş parçacığı açar (madde 21: UI Hermes'i beklemez).
+     *
+     * Yazma kilidi yalnız kısa defter güncellemeleri için alınır; tur
+     * dakikalarca sürebilir ve o sırada tarama/mutasyon bloke OLMAMALI.
+     */
+    pub fn run_job(&self, job_id: &str) {
+        use crate::hermes::{jobs, turn};
+
+        let prepared = jobs::prepare(&self.writer(), job_id);
+        let result = prepared.and_then(|prepared| {
+            turn::run(&prepared.title, &prepared.prompt, |session| {
+                let started = jobs::mark_started(&self.writer(), job_id, session).unwrap_or(false);
+                jobs::mark_dirty();
+                started
+            })
+        });
+
+        {
             let conn = self.writer();
-            if crate::hermes::jobs::dispatch(&conn, &job_id).is_ok() {
-                changed = true;
-            } else {
-                // dispatch kendi hatasını deftere yazdı; yine de değişiklik.
-                changed = true;
-            }
+            let _ = match &result {
+                Ok(outcome) => jobs::apply_outcome(&conn, job_id, outcome),
+                Err(err) => jobs::fail(&conn, job_id, err),
+            };
         }
-
-        let running = {
-            let conn = self.reader();
-            crate::hermes::jobs::running_ids(&conn).unwrap_or_default()
-        };
-        for job_id in running {
-            let conn = self.writer();
-            if crate::hermes::jobs::refresh(&conn, &job_id).is_ok() {
-                changed = true;
-            }
-        }
-
-        changed
+        jobs::release(job_id);
+        jobs::mark_dirty();
     }
 }

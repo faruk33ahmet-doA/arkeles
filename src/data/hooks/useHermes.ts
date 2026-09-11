@@ -152,7 +152,6 @@ export function useSubmitJob() {
         errorCode: null,
         errorMessage: null,
         source: "arkeles",
-        outputs: [],
       };
 
       queryClient.setQueryData<Job[]>(queryKeys.hermes.activeJobs, [

@@ -25,9 +25,12 @@ pub struct WorkspaceDef {
 }
 
 /*
- * Anayasa madde 36.3 sırası. `active` alanı Sprint 3 kapsamıdır:
- * WIF ve GEN gerçek veriyle çalışır, diğerleri görünür ama yüzeyleri
- * henüz geliştirilmedi (madde 26.4: kırık değil, HENÜZ boş).
+ * Anayasa madde 36.3 sırası. Sprint 5: YEDİSİ DE AKTİF.
+ *
+ * Hepsi aynı şablonla, aynı yolla çalışır — kuruma özel bileşen YOK.
+ * Vault'ta verisi olmayan bir kurum boş durum doktrinine düşer (madde 26:
+ * kırık değil, HENÜZ boş). `active` alanı veri olarak kalır: yeni bir kurum
+ * eklenirken yüzeyi hazır değilse `false` ile görünür-ama-boş başlar.
  */
 pub const WORKSPACES: &[WorkspaceDef] = &[
     WorkspaceDef {
@@ -46,31 +49,31 @@ pub const WORKSPACES: &[WorkspaceDef] = &[
         id: "tuga",
         label: "TüGA",
         aliases: &["tuga", "tüga"],
-        active: false,
+        active: true,
     },
     WorkspaceDef {
         id: "burkon",
         label: "Burkon",
         aliases: &["burkon"],
-        active: false,
+        active: true,
     },
     WorkspaceDef {
         id: "merci",
         label: "Merci",
         aliases: &["merci"],
-        active: false,
+        active: true,
     },
     WorkspaceDef {
         id: "kepder",
         label: "KEPDER",
         aliases: &["kepder"],
-        active: false,
+        active: true,
     },
     WorkspaceDef {
         id: "ogrenciyiz",
         label: "Öğrenciyiz.biz.tr",
         aliases: &["ogrenciyiz", "öğrenciyiz", "ogrenciyiz.biz.tr", "öğrenciyiz.biz.tr"],
-        active: false,
+        active: true,
     },
 ];
 
@@ -128,9 +131,12 @@ mod tests {
     }
 
     #[test]
-    fn sprint_3_aktifleri_wif_ve_gen() {
+    fn sprint_5_yedi_alan_da_aktif() {
         let active: Vec<&str> = WORKSPACES.iter().filter(|w| w.active).map(|w| w.id).collect();
-        assert_eq!(active, vec!["wif", "gen"]);
+        assert_eq!(
+            active,
+            vec!["wif", "gen", "tuga", "burkon", "merci", "kepder", "ogrenciyiz"]
+        );
     }
 
     #[test]
@@ -149,6 +155,7 @@ mod tests {
      * BÜTÜN verisi görünmez olur. Bu bir kez gerçekleşti.
      */
     #[test]
+    #[allow(non_snake_case, reason = "büyük ASCII 'I' testin konusu")]
     fn ascii_I_harfi_turkce_kuralla_bozulmaz() {
         assert_eq!(resolve("WIF"), Some("wif"), "ASCII 'I' → 'i' olmalı, 'ı' değil");
         assert_eq!(normalize("WIF"), "wif");
@@ -157,6 +164,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(non_snake_case, reason = "büyük ASCII 'I' testin konusu")]
     fn buyuk_I_noktali_i_ye_donusur() {
         // Unicode varsayılanı 'İ'yi "i + birleşen nokta" yapar; eşleşmeyi bozar.
         assert_eq!(normalize("İ"), "i");

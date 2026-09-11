@@ -1,11 +1,13 @@
+import { useState } from "react";
 import { Card } from "@/ui/Card";
 import { EmptyState } from "@/ui/EmptyState";
 import { useNoteDetail } from "@/data/hooks/useWork";
 import { useWorkStore } from "@/state/workStore";
-import { TaskRow } from "@/modules/today/components/TaskRow";
+import { MovableTaskList } from "./components/MovableTaskList";
 import { NoteBody } from "./components/NoteBody";
 import { TagEditor } from "./components/TagEditor";
 import { FrontmatterEditor } from "./components/FrontmatterEditor";
+import { openDocument } from "@/services/work.service";
 import { cn } from "@/lib/cn";
 import type { NoteLink } from "@/lib/generated";
 
@@ -74,12 +76,15 @@ export function NoteDetailView({ noteId }: { noteId: string }) {
           </Card>
 
           {data.tasks.length > 0 ? (
-            <Card title="Görevler">
-              <div className="divide-y divide-border-subtle">
-                {data.tasks.map((task) => (
-                  <TaskRow key={task.id} task={task} />
-                ))}
-              </div>
+            <Card
+              title="Görevler"
+              action={
+                data.managed && data.tasks.length > 1 ? (
+                  <span className="text-xs text-text-tertiary">sürükle · ⌥↑ ⌥↓</span>
+                ) : null
+              }
+            >
+              <MovableTaskList tasks={data.tasks} />
             </Card>
           ) : null}
         </div>
@@ -101,14 +106,18 @@ export function NoteDetailView({ noteId }: { noteId: string }) {
             />
           </Card>
 
-          {/* Sprint 3 madde 11: giden ve gelen ayrı. */}
+          {/* Sprint 3 madde 11: giden ve gelen ayrı. Sprint 5: belgeler ayrı. */}
           <Card title="İlişkili">
             {data.outgoing.length === 0 && data.incoming.length === 0 ? (
               <EmptyState message="Bağlantı yok." />
             ) : (
               <div className="flex flex-col gap-4">
-                <LinkGroup label="Giden" links={data.outgoing} />
+                <LinkGroup
+                  label="Giden"
+                  links={data.outgoing.filter((link) => !link.documentId)}
+                />
                 <LinkGroup label="Gelen" links={data.incoming} />
+                <DocumentGroup links={data.outgoing.filter((link) => link.documentId)} />
               </div>
             )}
           </Card>
@@ -149,6 +158,48 @@ function LinkGroup({ label, links }: { label: string; links: NoteLink[] }) {
           </li>
         ))}
       </ul>
+    </div>
+  );
+}
+
+/*
+ * Belge bağlantıları — Sprint 5 madde 7.
+ *
+ * Belge bir NOT DEĞİLDİR: not detayında açılmaz, işletim sisteminin kendi
+ * uygulamasında açılır. Yol arayüzde YOK; yalnız index kimliği gider ve
+ * çekirdek yolu index'ten çözer (madde 19 — güvenli çözücü).
+ */
+function DocumentGroup({ links }: { links: NoteLink[] }) {
+  const [failed, setFailed] = useState(false);
+  if (links.length === 0) return null;
+
+  return (
+    <div className="flex flex-col gap-2">
+      <span className="text-xs uppercase tracking-[0.08em] text-text-tertiary">
+        Belgeler
+      </span>
+      <ul className="flex flex-col gap-1">
+        {links.map((link, index) => (
+          <li key={`${link.documentId}-${index}`}>
+            <button
+              type="button"
+              onClick={() => {
+                setFailed(false);
+                if (link.documentId) {
+                  openDocument(link.documentId).catch(() => setFailed(true));
+                }
+              }}
+              className={cn(
+                "w-full truncate rounded-sm px-1 py-1 text-left text-sm text-text-primary",
+                "outline-none hover:bg-surface-3 focus-visible:ring-1 focus-visible:ring-border-strong",
+              )}
+            >
+              {link.title}
+            </button>
+          </li>
+        ))}
+      </ul>
+      {failed ? <p className="text-xs text-status-attention">Belge açılamadı.</p> : null}
     </div>
   );
 }

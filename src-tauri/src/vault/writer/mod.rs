@@ -561,13 +561,8 @@ fn replace_key_block(yaml: &str, key: &str, value: Option<&FieldValue>) -> CoreR
 
 /// Bir satırı dosya içinde başka bir konuma taşır.
 ///
-/// SPRINT 2: altyapı hazır ve testli ama UI'ya BAĞLANMADI — sürükle-bırak
-/// etkileşimi madde 23 hareket kurallarıyla birlikte tasarlanmalı ve bu
-/// Sprint 2 kapsamı dışında. Kullanılmadığı açıkça işaretli.
-#[allow(dead_code, reason = "Sprint 2 kapsamı: altyapı; UI bağlantısı sonraki sprint")]
-///
-/// SPRINT 2 KAPSAMI: altyapı. UI'ya bağlanmadı çünkü sürükle-bırak
-/// etkileşimi madde 23 hareket kurallarıyla birlikte tasarlanmalı.
+/// Sprint 2'de yazıldı; Sprint 5'te görev sırasına bağlandı
+/// (`move_task` komutu: sürükle-bırak + klavye).
 ///
 /// Yalnız TEK satır taşınır; girintili alt satırlar taşınmaz. Alt görev
 /// hiyerarşisini taşımak bir YAPI kararıdır ve gerekçesiz varsayılmamalı

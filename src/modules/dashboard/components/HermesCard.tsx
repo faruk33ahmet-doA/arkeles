@@ -50,9 +50,11 @@ export function HermesCard() {
         <StatusDot
           status={data?.reachable ? "online" : "offline"}
           label={
-            data?.reachable
-              ? `Bağlı${data.version ? ` · ${data.version}` : ""}`
-              : "Ulaşılamıyor"
+            data === undefined
+              ? "Yoklanıyor"
+              : data.reachable
+                ? `Bağlı${data.version ? ` · ${data.version}` : ""}`
+                : "Ulaşılamıyor"
           }
         />
 
