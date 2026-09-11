@@ -229,3 +229,78 @@ pub struct NoteLink {
     pub note_id: Option<String>,
     pub title: String,
 }
+
+// ===========================================================================
+// HERMES İŞ KUYRUĞU — Sprint 4
+// ===========================================================================
+
+/// Bir işin sonucu — Sprint 4 madde 8. ARKELÉS sonuç ÜRETMEZ, işaret eder.
+#[derive(Debug, Clone, Serialize, TS)]
+#[ts(export, export_to = "../../src/lib/generated/")]
+#[serde(rename_all = "camelCase")]
+pub struct JobOutput {
+    /// "note" | "document" | "external"
+    pub kind: String,
+    /// note → arkeles_id · document → vault yolu · external → serbest
+    pub reference: String,
+    pub label: String,
+}
+
+/// ARKELÉS'ten Hermes'e gönderilen semantik iş — Sprint 4 madde 3.
+///
+/// `status` HERMES'İN BİLDİRDİĞİDİR, ARKELÉS'in tahmini değil (madde 7.3).
+#[derive(Debug, Clone, Serialize, TS)]
+#[ts(export, export_to = "../../src/lib/generated/")]
+#[serde(rename_all = "camelCase")]
+pub struct Job {
+    pub id: String,
+    pub action: String,
+    /// Arayüzde görünen aksiyon adı (allowlist'ten).
+    pub action_label: String,
+    pub workspace: Option<String>,
+    pub summary: String,
+    /// queued | running | completed | failed | cancelled
+    pub status: String,
+    pub created_at: String,
+    pub started_at: Option<String>,
+    pub finished_at: Option<String>,
+    /// Hermes bildiriyorsa 0-100. Bildirmiyorsa `None` —
+    /// SAHTE YÜZDE ÜRETİLMEZ (Sprint 4 madde 7).
+    pub progress: Option<u32>,
+    /// Kısa hata kodu. Stack trace ASLA (madde 19).
+    pub error_code: Option<String>,
+    pub error_message: Option<String>,
+    /// arkeles | telegram | hermes-ui — Sprint 4 madde 17.
+    pub source: String,
+    pub outputs: Vec<JobOutput>,
+}
+
+/// Dashboard Hermes özeti — Sprint 4 madde 4, 13.
+///
+/// Madde 24.3 (tek bakış) gereği KISA: uzun aktivite akışı buraya dökülmez.
+#[derive(Debug, Serialize, TS)]
+#[ts(export, export_to = "../../src/lib/generated/")]
+#[serde(rename_all = "camelCase")]
+pub struct HermesSummary {
+    pub reachable: bool,
+    pub version: Option<String>,
+    pub running: u32,
+    pub queued: u32,
+    pub completed_today: u32,
+    pub failed_today: u32,
+    /// En son tamamlanan iş — tek satır. Yoksa gizlenir.
+    pub last_completed: Option<Job>,
+}
+
+/// Kullanılabilir semantik aksiyon — Sprint 4 madde 5.
+///
+/// Bu liste Hermes'in İLAN ETTİĞİ yeteneklerle KESİŞTİRİLİR; desteklenmeyen
+/// aksiyon arayüze HİÇ ulaşmaz (madde 18.2).
+#[derive(Debug, Serialize, TS)]
+#[ts(export, export_to = "../../src/lib/generated/")]
+#[serde(rename_all = "camelCase")]
+pub struct AvailableAction {
+    pub id: String,
+    pub label: String,
+    pub capability: String,
+}

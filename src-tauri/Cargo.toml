@@ -36,6 +36,14 @@ sha2 = "0.10"
 # Rust → TypeScript tip üretimi. Madde 14.2: elle yazılmış IPC tipi YASAK.
 ts-rs = "10"
 
+# Hermes WebSocket JSON-RPC istemcisi (Sprint 4).
+#
+# Hermes'in gerçek sözleşmesi `ws://127.0.0.1:9119/api/ws` üzerinde JSON-RPC
+# 2.0'dır — el yazımı HTTP ile konuşulamaz. `tungstenite` senkron, tokio
+# gerektirmez ve TLS özellikleri KAPALI: yalnız loopback'e bağlanıyoruz
+# (madde 19.1), TLS yığını gereksiz ağırlık olurdu (madde 14.1).
+tungstenite = { version = "0.24", default-features = false, features = ["handshake"] }
+
 # Anayasa madde 15: SQLite index. `bundled` → sistem SQLite'ına bağımlı
 # olmayız, sürüm sürprizi yaşamayız (madde 13: tamamen lokal, öngörülebilir).
 rusqlite = { version = "0.32", features = ["bundled"] }

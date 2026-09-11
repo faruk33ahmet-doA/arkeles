@@ -26,6 +26,7 @@ const DOCK_ORDER: LayerId[] = [
   "learning",
   "content",
   "social",
+  "hermes",
   "system",
 ];
 

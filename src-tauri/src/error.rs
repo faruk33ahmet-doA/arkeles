@@ -66,6 +66,30 @@ pub enum CoreError {
 
     #[error("dosya yazılamadı")]
     WriteFailed(#[source] std::io::Error),
+
+    /*
+     * HERMES hataları — Sprint 4.
+     *
+     * Madde 18.4: ulaşılamamak bir ARIZA DEĞİLDİR; yine de bir İŞ
+     * gönderilirken oluşursa kullanıcı bilmelidir (madde 25.4).
+     * Madde 19: hiçbiri stack trace TAŞIMAZ.
+     */
+    #[error("Hermes'e ulaşılamadı")]
+    HermesUnreachable,
+
+    #[error("Hermes kimlik doğrulaması başarısız")]
+    HermesUnauthorized,
+
+    #[error("Hermes zamanında yanıt vermedi")]
+    HermesTimeout,
+
+    /// Hermes'in KISA hata mesajı. `data` alanı (stack trace) atılmıştır.
+    #[error("{0}")]
+    HermesRejected(String),
+
+    /// Madde 19: allowlist dışı aksiyon adı.
+    #[error("bu aksiyon tanımlı değil")]
+    ActionNotAllowed,
 }
 
 impl CoreError {
@@ -86,6 +110,11 @@ impl CoreError {
             CoreError::Config(_) => "config",
             CoreError::IndexOpen(_) | CoreError::IndexQuery(_) => "index",
             CoreError::AppDirUnavailable => "app_dir",
+            CoreError::HermesUnreachable => "hermes_unreachable",
+            CoreError::HermesUnauthorized => "hermes_unauthorized",
+            CoreError::HermesTimeout => "hermes_timeout",
+            CoreError::HermesRejected(_) => "hermes_rejected",
+            CoreError::ActionNotAllowed => "action_not_allowed",
         }
     }
 }

@@ -22,7 +22,7 @@ use rusqlite::Connection;
 use crate::error::{CoreError, CoreResult};
 
 /// Anayasa madde 15.5. Bu sayı artınca index sıfırlanır ve yeniden kurulur.
-pub const SCHEMA_VERSION: i64 = 3;
+pub const SCHEMA_VERSION: i64 = 4;
 
 /// Şemayı uygular. Sürüm uyuşmazsa her şeyi silip yeniden kurar.
 pub fn apply(conn: &Connection) -> CoreResult<()> {
@@ -46,6 +46,8 @@ pub fn apply(conn: &Connection) -> CoreResult<()> {
 }
 
 const DROP_ALL: &str = r#"
+DROP TABLE IF EXISTS job_outputs;
+DROP TABLE IF EXISTS jobs;
 DROP TABLE IF EXISTS documents;
 DROP TABLE IF EXISTS index_meta;
 DROP TABLE IF EXISTS notes_fts;
@@ -164,4 +166,61 @@ CREATE TABLE documents (
 ) STRICT;
 
 CREATE INDEX idx_documents_modified ON documents(modified_at DESC);
+
+-- ---------------------------------------------------------------------------
+-- jobs — ARKELÉS'in Hermes'e GÖNDERDİĞİ semantik işlerin defteri (Sprint 4).
+--
+-- ANAYASA KONUMU (madde 9.3 silme testi):
+-- Bu tablo TÜRETİLMİŞ VERİDİR. İşin kendisi ve sonucu Hermes'te ve
+-- Obsidian'dadır; burada tutulan şey ARKELÉS'in "hangi isteği hangi Hermes
+-- oturumuna bağladığı" eşleşmesidir. Silinirse ARKELÉS hangi oturumu
+-- başlattığını unutur — ama İŞ de SONUÇ da kaybolmaz, ikisi de Hermes'te
+-- ve vault'ta durur.
+--
+-- ARKELÉS işi YAPMAZ (madde 7.3): `status` alanı Hermes'in bildirdiğidir,
+-- ARKELÉS'in tahmini değil.
+-- ---------------------------------------------------------------------------
+CREATE TABLE jobs (
+    id             TEXT PRIMARY KEY,
+    -- Allowlist'teki kanonik aksiyon adı (hermes::contract::ACTIONS).
+    action         TEXT NOT NULL,
+    workspace      TEXT,
+    -- Kullanıcının yazdığı kısa açıklama. İÇERİK DEĞİL, başlık.
+    summary        TEXT NOT NULL,
+    -- queued | running | completed | failed | cancelled
+    status         TEXT NOT NULL,
+    created_at     TEXT NOT NULL,
+    started_at     TEXT,
+    finished_at    TEXT,
+    -- Hermes ilerleme bildiriyorsa 0-100; bildirmiyorsa NULL.
+    -- Madde: sahte progress ÜRETİLMEZ.
+    progress       INTEGER,
+    -- Hermes oturum kimliği — durum buradan okunur.
+    hermes_ref     TEXT,
+    -- Hata KODU (kısa), stack trace DEĞİL (Sprint 4 madde 19).
+    error_code     TEXT,
+    error_message  TEXT,
+    -- İşin nereden geldiği: arkeles | telegram | hermes-ui
+    source         TEXT NOT NULL DEFAULT 'arkeles'
+) STRICT;
+
+CREATE INDEX idx_jobs_created   ON jobs(created_at DESC);
+CREATE INDEX idx_jobs_status    ON jobs(status);
+CREATE INDEX idx_jobs_workspace ON jobs(workspace) WHERE workspace IS NOT NULL;
+
+-- ---------------------------------------------------------------------------
+-- job_outputs — bir işin ürettiği sonuç referansları (Sprint 4 madde 8).
+--
+-- ARKELÉS sonuç ÜRETMEZ; yalnız Hermes'in bildirdiği referansı saklar.
+-- `kind`: note | document | external
+-- `ref`:  note → arkeles_id veya başlık · document → vault yolu
+-- ---------------------------------------------------------------------------
+CREATE TABLE job_outputs (
+    job_id  TEXT NOT NULL,
+    kind    TEXT NOT NULL,
+    ref     TEXT NOT NULL,
+    label   TEXT NOT NULL,
+    PRIMARY KEY (job_id, kind, ref),
+    FOREIGN KEY (job_id) REFERENCES jobs(id) ON DELETE CASCADE
+) STRICT;
 "#;

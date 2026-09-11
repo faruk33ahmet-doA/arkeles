@@ -35,6 +35,9 @@ use tauri::Manager;
 /// Uygulama durumu — Tauri tarafından yönetilir, komutlara enjekte edilir.
 ///
 /// Anayasa madde 17.2: uygulama yapılandırması vault'a yazılmaz.
+/// İş kuyruğu değiştiğinde arayüze yayınlanan olay — Sprint 4.
+pub const JOBS_CHANGED_EVENT: &str = "hermes:jobs-changed";
+
 pub struct AppState {
     pub config: config::Config,
     pub index: index::IndexHandle,
@@ -112,6 +115,31 @@ pub fn run() {
                 }
             }
 
+            /*
+             * İş sürücüsü — Sprint 4 madde 6, 21.
+             *
+             * Kuyruktaki işleri Hermes'e iletir ve çalışanların durumunu
+             * tazeler. Kendi iş parçacığında çalışır: UI ASLA Hermes'i
+             * beklemez (madde 21).
+             *
+             * 2 sn aralık: madde 35.1 (gereksiz iş yasak) ile kullanıcının
+             * "iş ilerliyor mu" beklentisi arasındaki denge. Yoklama
+             * fırtınası YOK (Sprint 4 madde 10).
+             */
+            {
+                let handle = app.handle().clone();
+                std::thread::spawn(move || loop {
+                    std::thread::sleep(std::time::Duration::from_secs(2));
+                    let Some(state) = handle.try_state::<AppState>() else {
+                        return;
+                    };
+                    if state.index.drive_jobs() {
+                        use tauri::Emitter;
+                        let _ = handle.emit(JOBS_CHANGED_EVENT, ());
+                    }
+                });
+            }
+
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -138,6 +166,14 @@ pub fn run() {
             ipc::work_cmds::workspace_documents,
             ipc::work_cmds::note_detail,
             ipc::work_cmds::open_document,
+            // Hermes — Sprint 4. Aksiyon adları allowlist'ten doğrulanır.
+            ipc::hermes_cmds::hermes_summary,
+            ipc::hermes_cmds::hermes_actions,
+            ipc::hermes_cmds::submit_job,
+            ipc::hermes_cmds::active_jobs,
+            ipc::hermes_cmds::job_history,
+            ipc::hermes_cmds::retry_job,
+            ipc::hermes_cmds::cancel_job,
         ])
         .run(tauri::generate_context!())
         .expect("ARKELÉS başlatılamadı");

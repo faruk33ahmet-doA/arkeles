@@ -20,6 +20,8 @@ import { useHermesHealth } from "@/data/hooks/useHermesHealth";
 import { useSearch } from "@/data/hooks/useSearch";
 import { useInboxStatus } from "@/data/hooks/useInboxStatus";
 import { useWorkspaces } from "@/data/hooks/useWork";
+import { useHermesActions } from "@/data/hooks/useHermes";
+import { useHermesStore } from "@/state/hermesStore";
 import { useWorkStore } from "@/state/workStore";
 import { QuickCapture } from "./QuickCapture";
 import { getActions, type Action, type ActionContext } from "./actionRegistry";
@@ -56,6 +58,8 @@ export function CommandPalette() {
   const { data: hits } = useSearch(query);
   const { data: inbox } = useInboxStatus();
   const { data: workspaces } = useWorkspaces();
+  const { data: hermesAvailable } = useHermesActions();
+  const openHermesPanel = useHermesStore((s) => s.open);
   const openWorkspaceInStore = useWorkStore((s) => s.openWorkspace);
   const setPanel = useWorkStore((s) => s.setPanel);
 
@@ -88,8 +92,19 @@ export function CommandPalette() {
         if (panel) setPanel(panel);
         enterLayer("work");
       },
+      // Sprint 4 madde 18: tek navigasyon yolu — kurumu aç, aksiyonu hazırla.
+      openHermesAction: (actionId, workspaceId) => {
+        if (workspaceId) {
+          openWorkspaceInStore(workspaceId);
+          setPanel("overview");
+          enterLayer("work");
+        } else {
+          enterLayer("hermes");
+        }
+        openHermesPanel(actionId, workspaceId);
+      },
     }),
-    [enterLayer, setOpen, openWorkspaceInStore, setPanel],
+    [enterLayer, setOpen, openWorkspaceInStore, setPanel, openHermesPanel],
   );
 
   // Madde 18.2 filtresi: yeteneği olmayan semantik aksiyon gizlenir.
@@ -97,6 +112,7 @@ export function CommandPalette() {
     return getActions({
       inboxAvailable: inbox?.exists === true,
       workspaces,
+      hermesActions: hermesAvailable,
     }).filter((action) => {
       if (action.kind !== "semantic") return true;
       if (!action.capability) return false;
@@ -104,7 +120,7 @@ export function CommandPalette() {
         hermes?.reachable === true && hermes.capabilities.includes(action.capability)
       );
     });
-  }, [hermes, inbox, workspaces]);
+  }, [hermes, inbox, workspaces, hermesAvailable]);
 
   const groups = useMemo(() => groupActions(visibleActions), [visibleActions]);
 

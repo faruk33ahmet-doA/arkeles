@@ -54,7 +54,10 @@ describe("Cmd+K — kurum aksiyonları (Sprint 3 madde 13)", () => {
       enterLayer: () => {},
       closePalette: () => {},
       openQuickCapture: () => {},
-      openWorkspace: (id, panel) => calls.push({ id, panel }),
+      openHermesAction: () => {},
+      openWorkspace: (id, panel) => {
+        calls.push({ id, panel });
+      },
     };
 
     const actions = getActions({ ...BASE, workspaces: WORKSPACES });

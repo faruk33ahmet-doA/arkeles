@@ -11,7 +11,7 @@ yalnız hız kaybolur, o da vault'tan yeniden taranarak geri gelir.
 mod builder;
 mod db;
 mod query;
-mod schema;
+pub(crate) mod schema;
 mod work;
 
 #[cfg(test)]

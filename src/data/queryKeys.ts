@@ -6,7 +6,14 @@
  */
 
 export const queryKeys = {
-  hermes: { health: ["hermes", "health"] as const },
+  hermes: {
+    health: ["hermes", "health"] as const,
+    summary: ["hermes", "summary"] as const,
+    actions: ["hermes", "actions"] as const,
+    activeJobs: ["hermes", "jobs", "active"] as const,
+    history: (since: string, workspace: string | null, status: string | null) =>
+      ["hermes", "jobs", "history", since, workspace, status] as const,
+  },
   vault: { status: ["vault", "status"] as const },
   index: { status: ["index", "status"] as const },
   inbox: { status: ["inbox", "status"] as const },

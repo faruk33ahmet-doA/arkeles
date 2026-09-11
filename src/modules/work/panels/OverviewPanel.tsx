@@ -1,8 +1,11 @@
 import { Card } from "@/ui/Card";
 import { EmptyState } from "@/ui/EmptyState";
 import { useWorkspaceOverview } from "@/data/hooks/useWork";
+import { useHermesActions } from "@/data/hooks/useHermes";
 import { useWorkStore } from "@/state/workStore";
 import { cn } from "@/lib/cn";
+import { ActionLauncher } from "@/modules/hermes/components/ActionLauncher";
+import { Card as HermesCardShell } from "@/ui/Card";
 
 /*
  * Genel Bakış — Sprint 3 madde 3.
@@ -44,10 +47,14 @@ export function OverviewPanel({ workspaceId }: { workspaceId: string }) {
 
   if (isEmpty) {
     return (
-      <EmptyState
-        message="Bu çalışma alanı henüz boş."
-        hint="Obsidian'da bir nota workspace alanı eklediğinde burada görünür."
-      />
+      <div className="flex flex-col gap-6">
+        <EmptyState
+          message="Bu çalışma alanı henüz boş."
+          hint="Obsidian'da bir nota workspace alanı eklediğinde burada görünür."
+        />
+        {/* Boş kurumda bile Hermes'e iş verilebilir — madde 18.2 filtresi geçerli. */}
+        <HermesActions workspaceId={workspaceId} />
+      </div>
     );
   }
 
@@ -100,6 +107,15 @@ export function OverviewPanel({ workspaceId }: { workspaceId: string }) {
         </Card>
       ) : null}
 
+      {/*
+        Sprint 4 madde 5: semantik aksiyonlar göreve bağlı yerde, kısa.
+        Hermes yetenek bildirmiyorsa ActionLauncher HİÇ render edilmez
+        ve bu kart da görünmez (madde 18.2).
+      */}
+      <div className="md:col-span-3">
+        <HermesActions workspaceId={workspaceId} />
+      </div>
+
       <div className="md:col-span-3">
         <Card title="Son notlar">
           {data.recentNotes.length > 0 ? (
@@ -147,5 +163,25 @@ function Stat({ label, value }: { label: string; value: number }) {
         {label}
       </span>
     </div>
+  );
+}
+
+/*
+ * Hermes aksiyon yüzeyi — Sprint 4 madde 5, madde 18.2.
+ *
+ * Yetenek yoksa KART DA GÖRÜNMEZ. Boş bir "Hermes" başlığı göstermek
+ * gürültü olurdu; bildirilmeyen yetenek arayüzde HİÇ yer kaplamaz.
+ *
+ * Kullanılabilirliği `ActionLauncher`'ın render sonucundan çıkarmak yerine
+ * aynı kancadan okuruz — React elemanının içine bakmak kırılgan olurdu.
+ */
+function HermesActions({ workspaceId }: { workspaceId: string }) {
+  const { data: actions } = useHermesActions();
+  if (!actions || actions.length === 0) return null;
+
+  return (
+    <HermesCardShell title="Hermes">
+      <ActionLauncher workspace={workspaceId} />
+    </HermesCardShell>
   );
 }

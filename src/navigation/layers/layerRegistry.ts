@@ -72,6 +72,19 @@ export const LAYERS: Record<LayerId, LayerDefinition> = {
     status: "placeholder",
     component: () => import("@/modules/_placeholder/PlaceholderLayer"),
   },
+  /*
+   * Hermes aktivite katmanı — Sprint 4 madde 14.
+   *
+   * Dock'ta görünür çünkü "Ne yaptı?" sorusu günlük bir sorudur.
+   * ARKELÉS Hermes ARAYÜZÜ DEĞİLDİR: burada iş BAŞLATILMAZ, yalnız görülür.
+   */
+  hermes: {
+    id: "hermes",
+    title: "Hermes",
+    level: 1,
+    status: "live",
+    component: () => import("@/modules/hermes/HermesLayer"),
+  },
   system: {
     id: "system",
     title: "Sistem",

@@ -1,6 +1,6 @@
 import type { LayerId } from "@/navigation/layers/types";
 import type { WorkPanel } from "@/state/workStore";
-import type { Workspace } from "@/lib/generated";
+import type { AvailableAction, Workspace } from "@/lib/generated";
 import { listLayers } from "@/navigation/layers/layerRegistry";
 
 /*
@@ -46,6 +46,8 @@ export interface ActionContext {
   openQuickCapture: () => void;
   /** İş modülünde bir çalışma alanı ve panel açar — Sprint 3 madde 13. */
   openWorkspace: (workspaceId: string, panel?: WorkPanel) => void;
+  /** Hermes aksiyon yüzeyini bir çalışma alanında açar — Sprint 4 madde 18. */
+  openHermesAction: (actionId: string, workspaceId: string | null) => void;
 }
 
 /** Katmanlardan otomatik türeyen navigasyon aksiyonları (madde 27.4). */
@@ -127,6 +129,59 @@ function quickCaptureAction(): Action {
   };
 }
 
+/*
+ * Hermes aksiyonları — Sprint 4 madde 18.
+ *
+ * "Yalnız capability mevcutsa listelensin. Yeni paralel komut sistemi
+ *  oluşturma."
+ *
+ * Bu yüzden hem aksiyonlar hem kurumlar LİSTEDEN türer; hiçbiri elle
+ * yazılmaz. Hermes yetenek bildirmiyorsa bu grup HİÇ oluşmaz (madde 18.2).
+ */
+function hermesActions(
+  available: AvailableAction[],
+  workspaces: Workspace[],
+): Action[] {
+  if (available.length === 0) return [];
+
+  const actions: Action[] = [];
+  const activeWorkspaces = workspaces.filter((ws) => ws.active);
+
+  for (const action of available) {
+    // Kurumsuz (genel) çağrı.
+    actions.push({
+      id: `hermes:${action.id}`,
+      title: action.label,
+      group: "Hermes",
+      kind: "semantic",
+      capability: action.capability,
+      keywords: ["hermes", action.id],
+      run: (ctx) => {
+        ctx.openHermesAction(action.id, null);
+        ctx.closePalette();
+      },
+    });
+
+    // Aktif kurumlar için kısayol.
+    for (const ws of activeWorkspaces) {
+      actions.push({
+        id: `hermes:${action.id}:${ws.id}`,
+        title: `${ws.label} · ${action.label}`,
+        group: "Hermes",
+        kind: "semantic",
+        capability: action.capability,
+        keywords: ["hermes", action.id, ws.id, ws.label],
+        run: (ctx) => {
+          ctx.openHermesAction(action.id, ws.id);
+          ctx.closePalette();
+        },
+      });
+    }
+  }
+
+  return actions;
+}
+
 /**
  * Palette gösterilecek aksiyonlar.
  *
@@ -136,6 +191,7 @@ function quickCaptureAction(): Action {
 export function getActions(options: {
   inboxAvailable: boolean;
   workspaces?: Workspace[];
+  hermesActions?: AvailableAction[];
 }): Action[] {
   const actions = [...navigationActions()];
 
@@ -144,6 +200,10 @@ export function getActions(options: {
   }
   // Sprint 3 madde 13: kurum aksiyonları listeden TÜRETİLİR, yazılmaz.
   actions.push(...workspaceActions(options.workspaces ?? []));
+  // Sprint 4 madde 18: Hermes aksiyonları da listeden türer.
+  actions.push(
+    ...hermesActions(options.hermesActions ?? [], options.workspaces ?? []),
+  );
 
   return actions;
 }

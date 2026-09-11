@@ -24,7 +24,8 @@ export type LayerId =
   | "learning"
   | "content"
   | "social"
-  | "system";
+  | "system"
+  | "hermes";
 
 export interface LayerDefinition {
   id: LayerId;

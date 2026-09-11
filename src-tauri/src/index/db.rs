@@ -285,3 +285,86 @@ impl IndexHandle {
             .ok()
     }
 }
+
+/*
+ * Hermes iş kuyruğu — Sprint 4.
+ *
+ * Defter index veritabanında yaşar (madde 9.3: silme testi jobs tablosunun
+ * başında açıklandı). Yazma bağlantısını kullanır; okuma yolu okuma
+ * bağlantısını — böylece tarama sürerken de kuyruk görünür.
+ */
+impl IndexHandle {
+    pub fn submit_job(
+        &self,
+        action: &str,
+        workspace: Option<&str>,
+        input: &str,
+    ) -> CoreResult<crate::types::Job> {
+        let conn = self.writer();
+        crate::hermes::jobs::submit(&conn, action, workspace, input)
+    }
+
+    pub fn active_jobs(&self) -> CoreResult<Vec<crate::types::Job>> {
+        crate::hermes::jobs::active(&self.reader())
+    }
+
+    pub fn job_history(
+        &self,
+        since: &str,
+        workspace: Option<&str>,
+        status: Option<&str>,
+    ) -> CoreResult<Vec<crate::types::Job>> {
+        crate::hermes::jobs::history(&self.reader(), since, workspace, status)
+    }
+
+    pub fn retry_job(&self, job_id: &str) -> CoreResult<()> {
+        let conn = self.writer();
+        crate::hermes::jobs::retry(&conn, job_id)
+    }
+
+    pub fn cancel_job(&self, job_id: &str) -> CoreResult<()> {
+        let conn = self.writer();
+        crate::hermes::jobs::cancel(&conn, job_id)
+    }
+
+    pub fn hermes_summary(
+        &self,
+        health: crate::types::HermesHealth,
+    ) -> CoreResult<crate::types::HermesSummary> {
+        crate::hermes::summary(&self.reader(), health)
+    }
+
+    /// Arka plan sürücüsü: kuyruktaki işleri gönderir, çalışanları tazeler.
+    ///
+    /// Değişiklik olduysa `true` — çağıran arayüze olay yayınlar.
+    pub fn drive_jobs(&self) -> bool {
+        let mut changed = false;
+
+        let queued = {
+            let conn = self.reader();
+            crate::hermes::jobs::queued_ids(&conn).unwrap_or_default()
+        };
+        for job_id in queued {
+            let conn = self.writer();
+            if crate::hermes::jobs::dispatch(&conn, &job_id).is_ok() {
+                changed = true;
+            } else {
+                // dispatch kendi hatasını deftere yazdı; yine de değişiklik.
+                changed = true;
+            }
+        }
+
+        let running = {
+            let conn = self.reader();
+            crate::hermes::jobs::running_ids(&conn).unwrap_or_default()
+        };
+        for job_id in running {
+            let conn = self.writer();
+            if crate::hermes::jobs::refresh(&conn, &job_id).is_ok() {
+                changed = true;
+            }
+        }
+
+        changed
+    }
+}

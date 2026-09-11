@@ -8,6 +8,11 @@
  */
 
 export type { DashboardView } from "./DashboardView";
+export type { AvailableAction } from "./AvailableAction";
+export type { HermesSummary } from "./HermesSummary";
+export type { Job } from "./Job";
+export type { JobOutput } from "./JobOutput";
+
 export type { DocumentRef } from "./DocumentRef";
 export type { MeetingSummary } from "./MeetingSummary";
 export type { NoteDetail } from "./NoteDetail";

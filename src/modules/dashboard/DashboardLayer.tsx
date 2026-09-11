@@ -6,6 +6,7 @@ import { TaskGroup } from "@/modules/today/components/TaskGroup";
 import { LifeScoreCard } from "./components/LifeScoreCard";
 import { WorkspaceGrid } from "./components/WorkspaceGrid";
 import { SystemStatusCard } from "./components/SystemStatusCard";
+import { HermesCard } from "./components/HermesCard";
 import { markFirstMeaningfulPaint } from "@/lib/perf";
 
 /*
@@ -40,6 +41,8 @@ export default function DashboardLayer() {
 
         <div className="flex flex-col gap-6">
           <LifeScoreCard score={data?.lifeScore ?? null} loading={isLoading} />
+          {/* Sprint 4 madde 4, 13: kısa Hermes özeti. Detay ayrı katmanda. */}
+          <HermesCard />
           <SystemStatusCard />
         </div>
 

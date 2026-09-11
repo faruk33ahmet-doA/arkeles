@@ -6,6 +6,7 @@ import { ConflictPanel } from "@/ui/ConflictPanel";
 import { useCommandPaletteHotkey } from "@/command/useCommandPalette";
 import { useVaultStatus } from "@/data/hooks/useVaultStatus";
 import { useVaultChanged } from "@/data/hooks/useVaultChanged";
+import { useJobsChanged } from "@/data/hooks/useHermes";
 import { VaultPicker } from "@/modules/onboarding/VaultPicker";
 import { useGlobalKeybindings } from "./keybindings";
 import { WindowDragRegion } from "./WindowDragRegion";
@@ -26,6 +27,8 @@ export function AppShell() {
   useGlobalKeybindings();
   // Madde 20.4 → 21.3: Obsidian'da değişen not, kullanıcı dokunmadan yansır.
   useVaultChanged();
+  // Sprint 4 madde 10: iş durumu değişince kontrollü tazeleme.
+  useJobsChanged();
 
   const { data: vault, isLoading } = useVaultStatus();
 
