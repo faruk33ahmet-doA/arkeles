@@ -9,6 +9,7 @@ dizge Hermes'e ulaşamaz (Sprint 4 madde 19).
 use tauri::State;
 
 use crate::error::CoreResult;
+use crate::hermes::capabilities::ArkelesSemanticCapabilities;
 use crate::hermes::{self, contract};
 use crate::types::{AvailableAction, HermesHealth, HermesSummary, Job};
 use crate::AppState;
@@ -53,13 +54,21 @@ pub async fn hermes_actions() -> Vec<AvailableAction> {
         return Vec::new();
     }
 
+    let semantic = ArkelesSemanticCapabilities {
+        items: health.capabilities,
+    };
+
     contract::ACTIONS
         .iter()
-        .filter(|action| health.capabilities.iter().any(|c| c == action.capability))
+        .filter(|action| semantic.supports(action.required_capabilities))
         .map(|action| AvailableAction {
             id: action.id.to_string(),
             label: action.label.to_string(),
-            capability: action.capability.to_string(),
+            required_capabilities: action
+                .required_capabilities
+                .iter()
+                .map(|value| value.to_string())
+                .collect(),
         })
         .collect()
 }

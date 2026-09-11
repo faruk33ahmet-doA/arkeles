@@ -6,4 +6,4 @@
  * Bu liste Hermes'in İLAN ETTİĞİ yeteneklerle KESİŞTİRİLİR; desteklenmeyen
  * aksiyon arayüze HİÇ ulaşmaz (madde 18.2).
  */
-export type AvailableAction = { id: string, label: string, capability: string, };
+export type AvailableAction = { id: string, label: string, requiredCapabilities: Array<string>, };

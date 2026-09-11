@@ -20,6 +20,7 @@ export type { Workspace } from "./Workspace";
 export type { WorkspaceOverview } from "./WorkspaceOverview";
 
 export type { HermesHealth } from "./HermesHealth";
+export type { HermesCapability } from "./HermesCapability";
 export type { IndexStatus } from "./IndexStatus";
 export type { InboxStatus } from "./InboxStatus";
 export type { MutationResult } from "./MutationResult";

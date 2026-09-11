@@ -9,13 +9,18 @@ Hermes sağlık ve özet — Anayasa madde 18.
 use rusqlite::Connection;
 
 use crate::error::CoreResult;
-use crate::hermes::{contract, http, jobs, rpc};
+use crate::hermes::capabilities::{ArkelesSemanticCapabilities, HermesCapabilitySnapshot};
+use crate::hermes::{http, jobs, rpc};
 use crate::types::{HermesHealth, HermesSummary};
 
 impl HermesHealth {
     /// Madde 18.3 tablosundaki varsayılan durum.
     pub fn unreachable() -> Self {
-        Self { reachable: false, version: None, capabilities: Vec::new() }
+        Self {
+            reachable: false,
+            version: None,
+            capabilities: Vec::new(),
+        }
     }
 }
 
@@ -41,21 +46,24 @@ pub fn health() -> HermesHealth {
      * Bu durumda `reachable: true` ama `capabilities: []` döneriz: kullanıcı
      * Hermes'in çalıştığını görür, semantik aksiyonlar görünmez (madde 18.2).
      */
-    let mut capabilities = http::get_json("/api/status")
-        .map(|status| contract::declared_capabilities(&status))
-        .unwrap_or_default();
+    let status = http::get_json("/api/status");
+    let gateway_flags = rpc::call("gateway.capabilities", serde_json::json!({})).ok();
+    let toolsets = http::get_json("/api/tools/toolsets");
+    let skills = http::get_json("/api/skills");
 
-    // 3) Gateway'in kendi ilanı (Sprint 5, canlı doğrulandı). Token yoksa
-    //    veya kanal açılamazsa boş — sağlık yine `reachable: true` kalır.
-    if let Ok(flags) = rpc::call("gateway.capabilities", serde_json::json!({})) {
-        for flag in contract::declared_flags(&flags) {
-            if !capabilities.contains(&flag) {
-                capabilities.push(flag);
-            }
-        }
+    let snapshot = HermesCapabilitySnapshot::from_values(
+        status.as_ref(),
+        gateway_flags.as_ref(),
+        toolsets.as_ref(),
+        skills.as_ref(),
+    );
+    let capabilities = ArkelesSemanticCapabilities::from_snapshot(&snapshot).items;
+
+    HermesHealth {
+        reachable: true,
+        version,
+        capabilities,
     }
-
-    HermesHealth { reachable: true, version, capabilities }
 }
 
 /// Dashboard özeti — Sprint 4 madde 4, 13.

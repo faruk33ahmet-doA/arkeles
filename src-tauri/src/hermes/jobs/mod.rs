@@ -173,7 +173,7 @@ pub fn apply_outcome(conn: &Connection, job_id: &str, outcome: &Outcome) -> Core
     let (status, code, message) = match outcome {
         Outcome::Completed => ("completed", None, None),
         Outcome::Cancelled => ("cancelled", None, None),
-        Outcome::Failed(message) => ("failed", Some("hermes_failed"), Some(message.as_str())),
+        Outcome::Failed { code, message } => ("failed", Some(*code), Some(message.as_str())),
     };
     conn.execute(
         "UPDATE jobs SET status = ?2, finished_at = ?3, error_code = ?4, error_message = ?5

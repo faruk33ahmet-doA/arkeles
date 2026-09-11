@@ -113,89 +113,41 @@ pub struct ActionDef {
     pub id: &'static str,
     /// Arayüzde görünen ad.
     pub label: &'static str,
-    /// Bu aksiyonun görünmesi için Hermes'in ilan etmesi gereken yetenek.
-    pub capability: &'static str,
+    /// Capability adapter'ının üretmesi gereken semantik yetenekler.
+    pub required_capabilities: &'static [&'static str],
 }
 
 pub const ACTIONS: &[ActionDef] = &[
     ActionDef {
         id: "task.execute",
         label: "Hermes'e görev ver",
-        capability: "task.execute",
+        required_capabilities: &[super::capabilities::RUN_SUBMIT],
     },
     ActionDef {
         id: "note.create",
         label: "Yeni not oluştur",
-        capability: "note.create",
+        required_capabilities: &[
+            super::capabilities::RUN_SUBMIT,
+            super::capabilities::FILE_OUTPUT,
+        ],
     },
     ActionDef {
         id: "report.create",
         label: "Rapor oluştur",
-        capability: "report.create",
+        required_capabilities: &[
+            super::capabilities::RUN_SUBMIT,
+            super::capabilities::FILE_OUTPUT,
+        ],
     },
     ActionDef {
         id: "analysis.create",
         label: "Analiz iste",
-        capability: "analysis.create",
+        required_capabilities: &[super::capabilities::RUN_SUBMIT],
     },
 ];
 
 pub fn find_action(id: &str) -> Option<&'static ActionDef> {
     ACTIONS.iter().find(|a| a.id == id)
-}
-
-/*
- * YETENEK OKUMA — Anayasa madde 18.2. SPRINT 5'TE DÜZELTİLDİ.
- *
- * "ARKELÉS, Hermes'in bildirmediği yeteneği UI'da gösteremez."
- *
- * SPRINT 4 İHLALİ (kaldırıldı): o sürüm, Hermes açıkça yetenek listesi
- * döndürmediğinde "ajan sağlıklı → istem aksiyonları muhtemelen mümkün"
- * diye DÖRT yetenek VARSAYIYORDU. Bu, sağlık bilgisini (erişilebilirlik)
- * yetki bilgisiyle (yetenek) karıştırmaktı ve madde 18.2'yi doğrudan
- * ihlal ediyordu.
- *
- * ŞİMDİKİ KURAL — tek kaynak, çıkarsama yok:
- *   Hermes cevabında açık bir `capabilities` dizisi VARSA → o kullanılır.
- *   YOKSA → boş liste. Semantik aksiyonlar görünmez.
- *
- * Sağlık (`gateway.running`, `components.*.status`) burada OKUNMAZ bile —
- * okunursa biri ileride onu tekrar yeteneğe çevirmeye çalışır.
- */
-pub fn declared_capabilities(status: &serde_json::Value) -> Vec<String> {
-    status
-        .get("capabilities")
-        .and_then(|v| v.as_array())
-        .map(|list| {
-            list.iter()
-                .filter_map(|v| v.as_str())
-                .map(str::trim)
-                .filter(|s| !s.is_empty())
-                .map(str::to_string)
-                .collect()
-        })
-        .unwrap_or_default()
-}
-
-/*
- * GATEWAY YETENEKLERİ — Sprint 5.
- *
- * Hermes'in gerçek ilan kanalı `gateway.capabilities` RPC'sidir; cevap
- * `{ad: bool}` sözlüğüdür (canlı 0.21.0: yalnız
- * `per_session_exclusive_submit`). Yalnız AÇIKÇA `true` olan adlar
- * ilan sayılır — yine ÇIKARSAMA YOK.
- */
-pub fn declared_flags(result: &serde_json::Value) -> Vec<String> {
-    result
-        .as_object()
-        .map(|map| {
-            map.iter()
-                .filter(|(_, value)| value.as_bool() == Some(true))
-                .map(|(name, _)| name.trim().to_string())
-                .filter(|name| !name.is_empty())
-                .collect()
-        })
-        .unwrap_or_default()
 }
 
 /*
@@ -226,7 +178,6 @@ pub fn prompt_for(action: &ActionDef, workspace: Option<&str>, input: &str) -> S
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::json;
 
     #[test]
     fn aksiyon_allowlist_disi_reddedilir() {
@@ -245,73 +196,6 @@ mod tests {
         ids.sort();
         ids.dedup();
         assert_eq!(ids.len(), count);
-    }
-
-    #[test]
-    fn acikca_ilan_edilen_yetenek_kullanilir() {
-        let status = json!({"capabilities": ["pdf.create", "telegram.send"]});
-        assert_eq!(declared_capabilities(&status), vec!["pdf.create", "telegram.send"]);
-    }
-
-    /*
-     * GERİLEME TESTİ — Sprint 4 anayasa ihlali.
-     *
-     * Sağlıklı ajan / çalışan gateway YETENEK DEĞİLDİR. Bu testler o
-     * çıkarsamanın geri gelmesini engeller (madde 18.2).
-     */
-    #[test]
-    fn saglikli_ajan_yetenek_uretmez() {
-        let status = json!({"components": {"agent": {"status": "ok"}}});
-        assert!(declared_capabilities(&status).is_empty());
-    }
-
-    #[test]
-    fn calisan_gateway_yetenek_uretmez() {
-        let status = json!({"gateway": {"running": true}});
-        assert!(declared_capabilities(&status).is_empty());
-    }
-
-    #[test]
-    fn saglik_ve_bos_liste_birlikte_de_yetenek_uretmez() {
-        let status = json!({
-            "capabilities": [],
-            "gateway": {"running": true},
-            "components": {"agent": {"status": "ok"}}
-        });
-        assert!(declared_capabilities(&status).is_empty());
-    }
-
-    #[test]
-    fn dizge_olmayan_ve_bos_ogeler_atlanir() {
-        let status = json!({"capabilities": ["task.execute", 5, null, "", "  "]});
-        assert_eq!(declared_capabilities(&status), vec!["task.execute"]);
-    }
-
-    #[test]
-    fn bozuk_status_panik_yapmaz() {
-        for value in [json!(null), json!("metin"), json!(5), json!([1, 2])] {
-            assert!(declared_capabilities(&value).is_empty());
-        }
-    }
-
-    #[test]
-    fn gateway_bayraklari_yalniz_true_olanlar() {
-        let flags = declared_flags(&json!({
-            "per_session_exclusive_submit": true,
-            "kapali": false,
-            "dizge": "true",
-            "sayi": 1
-        }));
-        assert_eq!(flags, vec!["per_session_exclusive_submit".to_string()]);
-        assert!(declared_flags(&json!(null)).is_empty());
-        assert!(declared_flags(&json!(["task.execute"])).is_empty());
-    }
-
-    #[test]
-    fn gercek_hermes_bayragi_semantik_aksiyon_acmaz() {
-        // Canlı 0.21.0 cevabı: hiçbir allowlist aksiyonuyla eşleşmez.
-        let flags = declared_flags(&json!({"per_session_exclusive_submit": true}));
-        assert!(ACTIONS.iter().all(|a| !flags.iter().any(|f| f == a.capability)));
     }
 
     #[test]

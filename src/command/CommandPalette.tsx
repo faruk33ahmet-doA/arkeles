@@ -16,7 +16,6 @@ import {
 } from "@/ui/primitives/dialog";
 import { useCommandStore } from "@/state/commandStore";
 import { useZoom } from "@/navigation/zoom/useZoom";
-import { useHermesHealth } from "@/data/hooks/useHermesHealth";
 import { useSearch } from "@/data/hooks/useSearch";
 import { useInboxStatus } from "@/data/hooks/useInboxStatus";
 import { useWorkspaces } from "@/data/hooks/useWork";
@@ -53,7 +52,6 @@ export function CommandPalette() {
   const open = useCommandStore((s) => s.open);
   const setOpen = useCommandStore((s) => s.setOpen);
   const { enterLayer } = useZoom();
-  const { data: hermes } = useHermesHealth();
 
   const [query, setQuery] = useState("");
   const { data: hits } = useSearch(query);
@@ -113,19 +111,15 @@ export function CommandPalette() {
     [enterLayer, setOpen, openWorkspaceInStore, setPanel, openHermesPanel, moveSelected],
   );
 
-  // Madde 18.2 filtresi: yeteneği olmayan semantik aksiyon gizlenir.
+  // Madde 18.2: semantik liste çekirdekte capability-gated olarak gelir.
   const visibleActions = useMemo(() => {
     return getActions({
       inboxAvailable: inbox?.exists === true,
       workspaces,
       hermesActions: hermesAvailable,
       taskSelected,
-    }).filter((action) => {
-      if (action.kind !== "semantic") return true;
-      if (!action.capability) return false;
-      return hermes?.reachable === true && hermes.capabilities.includes(action.capability);
     });
-  }, [hermes, inbox, workspaces, hermesAvailable, taskSelected]);
+  }, [inbox, workspaces, hermesAvailable, taskSelected]);
 
   const groups = useMemo(() => groupActions(visibleActions), [visibleActions]);
 

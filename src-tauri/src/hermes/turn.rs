@@ -32,9 +32,23 @@ pub const TURN_TIMEOUT: Duration = Duration::from_secs(20 * 60);
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Outcome {
     Completed,
-    /// Hermes'in kısa hata metni (tek satır, en çok 200 karakter).
-    Failed(String),
+    /// Hermes'in kısa hata metni ve explicit `error_surface` sınıfı.
+    Failed {
+        code: &'static str,
+        message: String,
+    },
     Cancelled,
+}
+
+#[cfg(test)]
+impl Outcome {
+    /// Yapılandırılmış hata sınıfı bildirmeyen eski/bozuk Hermes cevabı.
+    pub fn failed(message: impl Into<String>) -> Self {
+        Self::Failed {
+            code: "hermes_failed",
+            message: message.into(),
+        }
+    }
 }
 
 /// Turu baştan sona yürütür. BLOKLAYICI — çağıran kendi iş parçacığındadır.
@@ -84,11 +98,29 @@ pub(crate) fn outcome_of(payload: &Value) -> CoreResult<Outcome> {
     match payload.get("status").and_then(Value::as_str) {
         Some("complete") => Ok(Outcome::Completed),
         Some("interrupted") => Ok(Outcome::Cancelled),
-        Some("error") => Ok(Outcome::Failed(rpc::short_text(
-            payload.get("text"),
-            "Hermes işi tamamlayamadı.",
-        ))),
+        Some("error") => Ok(Outcome::Failed {
+            code: failure_code(payload),
+            message: rpc::short_text(payload.get("text"), "Hermes işi tamamlayamadı."),
+        }),
         _ => Err(CoreError::HermesMalformed),
+    }
+}
+
+/// Hermes 0.21.0 `message.complete.error_surface.layer` alanını açıkça
+/// yayınlar. Yalnız tanımlı katmanlar eşlenir; hata metninden tür tahmini yok.
+fn failure_code(payload: &Value) -> &'static str {
+    match payload
+        .get("error_surface")
+        .and_then(|surface| surface.get("layer"))
+        .and_then(Value::as_str)
+    {
+        Some("billing") => "provider_billing",
+        Some("auth") => "provider_auth",
+        Some("provider") => "provider_failed",
+        Some("endpoint") => "provider_endpoint",
+        Some("streaming") => "provider_streaming",
+        Some("disk") => "host_disk_full",
+        _ => "hermes_failed",
     }
 }
 
@@ -164,8 +196,36 @@ mod tests {
             fake::event(ws, "s3", "message.complete", json!({ "status": "error", "text": text }));
         });
         let outcome = run_on(&mut open(server.port), "t", "p", Duration::from_secs(5), |_| true).unwrap();
-        assert_eq!(outcome, Outcome::Failed("Error: model yanıt vermedi".into()));
+        assert_eq!(outcome, Outcome::failed("Error: model yanıt vermedi"));
         server.finish();
+    }
+
+    #[test]
+    fn provider_hatasi_explicit_error_surface_ile_siniflanir() {
+        let outcome = outcome_of(&json!({
+            "status": "error",
+            "text": "Kredi yetersiz",
+            "error_surface": {"layer": "billing", "code": "billing", "retryable": false}
+        }))
+        .unwrap();
+        assert_eq!(
+            outcome,
+            Outcome::Failed {
+                code: "provider_billing",
+                message: "Kredi yetersiz".into()
+            }
+        );
+    }
+
+    #[test]
+    fn bozuk_error_surface_metin_tahmini_yapmaz() {
+        let outcome = outcome_of(&json!({
+            "status": "error",
+            "text": "HTTP 402 credits",
+            "error_surface": {"layer": 42}
+        }))
+        .unwrap();
+        assert_eq!(outcome, Outcome::failed("HTTP 402 credits"));
     }
 
     #[test]

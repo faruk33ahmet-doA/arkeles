@@ -154,7 +154,7 @@ fn sonuclar_deftere_yazilir() {
     for (outcome, status) in [
         (Outcome::Completed, "completed"),
         (Outcome::Cancelled, "cancelled"),
-        (Outcome::Failed("Model yanıt vermedi".into()), "failed"),
+        (Outcome::failed("Model yanıt vermedi"), "failed"),
     ] {
         let job = started(&conn);
         apply_outcome(&conn, &job.id, &outcome).unwrap();
@@ -168,10 +168,26 @@ fn sonuclar_deftere_yazilir() {
 fn hermes_hatasi_mesaj_tasir() {
     let conn = db();
     let job = started(&conn);
-    apply_outcome(&conn, &job.id, &Outcome::Failed("Model yanıt vermedi".into())).unwrap();
+    apply_outcome(&conn, &job.id, &Outcome::failed("Model yanıt vermedi")).unwrap();
     let after = read_one(&conn, &job.id).unwrap();
     assert_eq!(after.error_code.as_deref(), Some("hermes_failed"));
     assert_eq!(after.error_message.as_deref(), Some("Model yanıt vermedi"));
+}
+
+#[test]
+fn provider_hata_kodu_deftere_aynen_yazilir() {
+    let conn = db();
+    let job = started(&conn);
+    let outcome = Outcome::Failed {
+        code: "provider_billing",
+        message: "Kredi yetersiz".into(),
+    };
+
+    apply_outcome(&conn, &job.id, &outcome).unwrap();
+    let after = read_one(&conn, &job.id).unwrap();
+    assert_eq!(after.status, "failed");
+    assert_eq!(after.error_code.as_deref(), Some("provider_billing"));
+    assert_eq!(after.error_message.as_deref(), Some("Kredi yetersiz"));
 }
 
 #[test]
@@ -180,7 +196,7 @@ fn bitmis_is_yeniden_yazilmaz() {
     let job = started(&conn);
     apply_outcome(&conn, &job.id, &Outcome::Completed).unwrap();
 
-    apply_outcome(&conn, &job.id, &Outcome::Failed("geç gelen".into())).unwrap();
+    apply_outcome(&conn, &job.id, &Outcome::failed("geç gelen")).unwrap();
     fail(&conn, &job.id, &CoreError::HermesUnreachable).unwrap();
     assert_eq!(read_one(&conn, &job.id).unwrap().status, "completed");
     assert!(!mark_started(&conn, &job.id, "başka").unwrap());
@@ -243,7 +259,7 @@ fn progress_hic_uydurulmaz() {
 fn retry_yalniz_failed_isi_kuyruga_alir() {
     let conn = db();
     let job = started(&conn);
-    apply_outcome(&conn, &job.id, &Outcome::Failed("hata".into())).unwrap();
+    apply_outcome(&conn, &job.id, &Outcome::failed("hata")).unwrap();
 
     retry(&conn, &job.id).unwrap();
     let after = read_one(&conn, &job.id).unwrap();
@@ -360,7 +376,7 @@ fn sayimlar_dogru() {
     submit_one(&conn); // queued kalır
 
     apply_outcome(&conn, &b.id, &Outcome::Completed).unwrap();
-    apply_outcome(&conn, &c.id, &Outcome::Failed("x".into())).unwrap();
+    apply_outcome(&conn, &c.id, &Outcome::failed("x")).unwrap();
 
     let (running, queued, completed, failed) = counts(&conn).unwrap();
     assert_eq!((running, queued, completed, failed), (1, 1, 1, 1));
@@ -437,14 +453,24 @@ fn olmayan_is_hata_doner() {
 
 /// Defter → istem → gerçek Hermes turu → message.complete → defter.
 ///
-/// Arayüzdeki yetenek kapısı (madde 18.2) BİLEREK atlanır: gerçek Hermes
-/// ARKELÉS aksiyonlarını ilan etmediği için arayüz bu işi göstermez. Bu test
-/// yalnız adaptörün gerçek sözleşmeyle konuştuğunu kanıtlar.
+/// Önce aynı capability snapshot/adapter yolu `task.execute` aksiyonunu açar;
+/// ardından arayüzün kullandığı iş defteri ve tur sözleşmesi çalıştırılır.
 ///
 ///   HERMES_DASHBOARD_SESSION_TOKEN=… cargo test canli_hermes -- --ignored --nocapture
 #[test]
 #[ignore = "çalışan yerel Hermes gerektirir; bir LLM turu harcar"]
 fn canli_hermes_uctan_uca() {
+    let health = crate::hermes::health();
+    assert!(health.reachable, "canlı Hermes ulaşılamaz sınıflandı");
+    let semantic = crate::hermes::capabilities::ArkelesSemanticCapabilities {
+        items: health.capabilities,
+    };
+    let action = crate::hermes::contract::find_action("task.execute").unwrap();
+    assert!(
+        semantic.supports(action.required_capabilities),
+        "explicit Hermes ilanları task.execute aksiyonunu açmadı"
+    );
+
     let conn = db();
     let job = submit(
         &conn,
@@ -474,7 +500,16 @@ fn canli_hermes_uctan_uca() {
         done.started_at,
         done.finished_at
     );
-    assert_eq!(done.status, "completed");
+    assert!(
+        done.status == "completed"
+            || (done.status == "failed"
+                && done
+                    .error_code
+                    .as_deref()
+                    .is_some_and(|code| code.starts_with("provider_"))),
+        "entegrasyon dışı terminal sonuç bekleniyordu: {:?}",
+        done.error_code
+    );
     assert!(done.started_at.is_some());
     assert!(job_ref(&conn, &job.id).is_some());
 }

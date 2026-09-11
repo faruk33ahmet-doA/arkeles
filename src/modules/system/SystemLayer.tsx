@@ -98,7 +98,7 @@ export default function SystemLayer() {
             {/* Madde 18.2: yetenekler yalnız BİLDİRİLDİĞİNDE görünür. */}
             {hermes?.reachable && hermes.capabilities.length > 0 ? (
               <p className="pl-4 text-xs text-text-tertiary">
-                Yetenekler: {hermes.capabilities.join(" · ")}
+                Yetenekler: {hermes.capabilities.map((item) => item.label).join(" · ")}
               </p>
             ) : null}
           </div>

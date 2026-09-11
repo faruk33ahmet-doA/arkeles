@@ -47,8 +47,19 @@ pub struct HermesHealth {
     /// Madde 18.4: `false` bir HATA DEĞİL, sakin bir durumdur.
     pub reachable: bool,
     pub version: Option<String>,
-    /// Madde 18.2: arayüz yalnız bu listedeki yetenekleri gösterir.
-    pub capabilities: Vec<String>,
+    /// Madde 18.2: yalnız explicit Hermes ilanlarından eşlenen yetenekler.
+    pub capabilities: Vec<HermesCapability>,
+}
+
+/// Kullanıcı dostu ARKELÉS yeteneği ve denetlenebilir Hermes-native kaynağı.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
+#[ts(export, export_to = "../../src/lib/generated/")]
+#[serde(rename_all = "camelCase")]
+pub struct HermesCapability {
+    pub id: String,
+    pub label: String,
+    /// UI'da dökülmez; adapter kuralının hangi explicit ilandan geldiğini taşır.
+    pub sources: Vec<String>,
 }
 
 /// Madde 8.3: durum değişimi mekanik mutasyondur (Sprint 2).
@@ -294,5 +305,5 @@ pub struct HermesSummary {
 pub struct AvailableAction {
     pub id: String,
     pub label: String,
-    pub capability: String,
+    pub required_capabilities: Vec<String>,
 }

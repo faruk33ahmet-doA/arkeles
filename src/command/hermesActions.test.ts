@@ -18,10 +18,14 @@ const ws = (id: string, label: string, active: boolean): Workspace => ({
   noteCount: 0,
 });
 
-const action = (id: string, label: string, capability: string): AvailableAction => ({
+const action = (
+  id: string,
+  label: string,
+  ...requiredCapabilities: string[]
+): AvailableAction => ({
   id,
   label,
-  capability,
+  requiredCapabilities,
 });
 
 const WORKSPACES = [ws("wif", "WIF", true), ws("gen", "GEN", true), ws("tuga", "TüGA", false)];
@@ -41,7 +45,7 @@ describe("Cmd+K — Hermes aksiyonları (madde 18.2)", () => {
   it("bildirilen yetenek için genel aksiyon üretilir", () => {
     const ids = getActions({
       ...BASE,
-      hermesActions: [action("report.create", "Rapor oluştur", "report.create")],
+      hermesActions: [action("report.create", "Rapor oluştur", "run.submit", "file.output")],
     }).map((a) => a.id);
 
     expect(ids).toContain("hermes:report.create");
@@ -50,7 +54,7 @@ describe("Cmd+K — Hermes aksiyonları (madde 18.2)", () => {
   it("yalnız AKTİF kurumlar için kısayol üretilir", () => {
     const ids = getActions({
       ...BASE,
-      hermesActions: [action("report.create", "Rapor oluştur", "report.create")],
+      hermesActions: [action("report.create", "Rapor oluştur", "run.submit", "file.output")],
     }).map((a) => a.id);
 
     expect(ids).toContain("hermes:report.create:wif");
@@ -59,17 +63,17 @@ describe("Cmd+K — Hermes aksiyonları (madde 18.2)", () => {
     expect(ids).not.toContain("hermes:report.create:tuga");
   });
 
-  it("Hermes aksiyonları semantik sınıftadır ve capability taşır", () => {
+  it("Hermes aksiyonları semantik sınıftadır ve doğrulanmış gereksinimleri taşır", () => {
     // Semantik = Hermes'in alanı (madde 8.2). Capability olmadan gösterilemez.
     const actions = getActions({
       ...BASE,
-      hermesActions: [action("task.execute", "Görev ver", "task.execute")],
+      hermesActions: [action("task.execute", "Görev ver", "run.submit")],
     }).filter((a) => a.id.startsWith("hermes:"));
 
     expect(actions.length).toBeGreaterThan(0);
     for (const a of actions) {
       expect(a.kind).toBe("semantic");
-      expect(a.capability).toBe("task.execute");
+      expect(a.requiredCapabilities).toEqual(["run.submit"]);
     }
   });
 
@@ -88,7 +92,7 @@ describe("Cmd+K — Hermes aksiyonları (madde 18.2)", () => {
 
     const actions = getActions({
       ...BASE,
-      hermesActions: [action("analysis.create", "Analiz iste", "analysis.create")],
+      hermesActions: [action("analysis.create", "Analiz iste", "run.submit")],
     });
 
     actions.find((a) => a.id === "hermes:analysis.create")?.run?.(ctx);
@@ -105,8 +109,8 @@ describe("Cmd+K — Hermes aksiyonları (madde 18.2)", () => {
       inboxAvailable: true,
       workspaces: WORKSPACES,
       hermesActions: [
-        action("task.execute", "Görev ver", "task.execute"),
-        action("report.create", "Rapor oluştur", "report.create"),
+        action("task.execute", "Görev ver", "run.submit"),
+        action("report.create", "Rapor oluştur", "run.submit", "file.output"),
       ],
     }).map((a) => a.id);
 

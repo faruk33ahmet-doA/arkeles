@@ -56,6 +56,6 @@ describe("actionRegistry", () => {
     // çalışmazdı; madde 10 tam bunu engellemek için var.
     const capture = getActions(WITH_INBOX).find((a) => a.id === "capture:quick");
     expect(capture?.kind).toBe("mechanic");
-    expect(capture?.capability).toBeUndefined();
+    expect(capture?.requiredCapabilities).toBeUndefined();
   });
 });

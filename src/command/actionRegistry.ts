@@ -19,8 +19,8 @@ import type { MoveDirection } from "@/lib/taskOrder";
  *   "system"    → uygulama yapılandırması (madde 17.2)
  *
  * Anayasa madde 18.2: Hermes'in bildirmediği yetenek arayüzde HİÇ görünmez.
- * Bu yüzden "semantic" aksiyonlar bir `capability` anahtarı taşır ve
- * palet, Hermes'in yetenek listesinde olmayanları filtreler.
+ * Semantik aksiyonlar, çekirdeğin explicit Hermes ilanlarından süzdüğü
+ * `AvailableAction` listesinden türer; frontend yetenek tahmini yapmaz.
  */
 
 export type ActionKind = "navigate" | "mechanic" | "semantic" | "system";
@@ -34,8 +34,8 @@ export interface Action {
   kind: ActionKind;
   /** Arama eşleşmesini genişletir (Türkçe/İngilizce eş anlam). */
   keywords?: string[];
-  /** Yalnız "semantic" için: Hermes yetenek anahtarı (madde 18.2). */
-  capability?: string;
+  /** Yalnız "semantic" için: çekirdeğin doğruladığı semantik gereksinimler. */
+  requiredCapabilities?: string[];
   /** Aynı aksiyonun doğrudan klavye kısayolu — palette ipucu olarak görünür. */
   shortcut?: string;
   /** Aksiyonun kendisi. Sprint 0'da navigate dışındakiler tanımsız. */
@@ -186,7 +186,7 @@ function hermesActions(
       title: action.label,
       group: "Hermes",
       kind: "semantic",
-      capability: action.capability,
+      requiredCapabilities: action.requiredCapabilities,
       keywords: ["hermes", action.id],
       run: (ctx) => {
         ctx.openHermesAction(action.id, null);
@@ -201,7 +201,7 @@ function hermesActions(
         title: `${ws.label} · ${action.label}`,
         group: "Hermes",
         kind: "semantic",
-        capability: action.capability,
+        requiredCapabilities: action.requiredCapabilities,
         keywords: ["hermes", action.id, ws.id, ws.label],
         run: (ctx) => {
           ctx.openHermesAction(action.id, ws.id);
