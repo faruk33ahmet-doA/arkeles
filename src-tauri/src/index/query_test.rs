@@ -78,6 +78,18 @@ fn arama_baslikta_eslesir() {
 }
 
 #[test]
+fn arama_sonucu_calisma_alanini_tasir() {
+    let conn = memory_index();
+    insert_note(&conn, "n1", "WIF Sponsorluk", "gövde metni", "{}");
+    conn.execute("UPDATE notes SET workspace = 'wif' WHERE id = 'n1'", [])
+        .unwrap();
+
+    let hits = search_ok(&conn, "sponsor");
+    assert_eq!(hits.len(), 1);
+    assert_eq!(hits[0].workspace.as_deref(), Some("wif"));
+}
+
+#[test]
 fn arama_govdede_eslesir_ve_snippet_dondurur() {
     let conn = memory_index();
     insert_note(&conn, "n1", "Başlık", "burada sponsorluk dosyası geçiyor", "{}");

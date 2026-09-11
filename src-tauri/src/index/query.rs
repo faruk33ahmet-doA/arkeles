@@ -227,7 +227,8 @@ pub fn search(conn: &Connection, query: &str, limit: u32) -> CoreResult<(Vec<Sea
 
     let mut stmt = conn
         .prepare(
-            "SELECT f.note_id, n.title, snippet(notes_fts, 2, '', '', '…', 12)
+            "SELECT f.note_id, n.title, n.workspace,
+                    snippet(notes_fts, 2, '', '', '…', 12)
              FROM notes_fts f
              JOIN notes n ON n.id = f.note_id
              WHERE notes_fts MATCH ?1
@@ -241,7 +242,8 @@ pub fn search(conn: &Connection, query: &str, limit: u32) -> CoreResult<(Vec<Sea
             Ok(SearchHit {
                 note_id: row.get(0)?,
                 title: row.get(1)?,
-                snippet: row.get(2)?,
+                workspace: row.get(2)?,
+                snippet: row.get(3)?,
             })
         })
         .map_err(CoreError::IndexQuery)?;

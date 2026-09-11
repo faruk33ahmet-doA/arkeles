@@ -62,6 +62,7 @@ export function CommandPalette() {
   const { data: hermesAvailable } = useHermesActions();
   const openHermesPanel = useHermesStore((s) => s.open);
   const openWorkspaceInStore = useWorkStore((s) => s.openWorkspace);
+  const openNoteInStore = useWorkStore((s) => s.openNote);
   const setPanel = useWorkStore((s) => s.setPanel);
   const taskSelected = useWorkStore((s) => s.noteId !== null && s.selectedTaskId !== null);
   const { moveSelected } = useSelectedTaskMove();
@@ -208,32 +209,36 @@ export function CommandPalette() {
                 );
               })}
 
-              {/*
-                Not sonuçları — madde 27.4.
-                SPRINT 1 KISITI: seçilince not AÇILMAZ, çünkü not görüntüleme
-                katmanı henüz yok. Madde 18.2 ("tıklandığında hata veren buton
-                yoktur") gereği sonuçlar `disabled` olarak listelenir: arama
-                çalıştığı görülür, yanıltıcı bir eylem sunulmaz.
-              */}
+              {/* Not sonuçları — madde 27.4. Çalışma alanı olan not doğru İş yüzeyinde açılır. */}
               {hits && hits.length > 0 ? (
                 <CommandGroup heading="Notlar" className={groupHeadingClass}>
-                  {hits.map((hit) => (
-                    <CommandItem
-                      key={hit.noteId}
-                      value={hit.noteId}
-                      disabled
-                      className={cn(itemClass, "cursor-default")}
-                    >
-                      <span className="flex min-w-0 flex-col gap-1">
-                        <span className="truncate text-text-primary">{hit.title}</span>
-                        {hit.snippet ? (
-                          <span className="truncate text-xs text-text-tertiary">
-                            {hit.snippet}
-                          </span>
-                        ) : null}
-                      </span>
-                    </CommandItem>
-                  ))}
+                  {hits.map((hit) => {
+                    const canOpen = hit.workspace !== null;
+                    return (
+                      <CommandItem
+                        key={hit.noteId}
+                        value={hit.noteId}
+                        disabled={!canOpen}
+                        onSelect={() => {
+                          if (!hit.workspace) return;
+                          openWorkspaceInStore(hit.workspace);
+                          openNoteInStore(hit.noteId);
+                          enterLayer("work");
+                          close();
+                        }}
+                        className={cn(itemClass, !canOpen && "cursor-default")}
+                      >
+                        <span className="flex min-w-0 flex-col gap-1">
+                          <span className="truncate text-text-primary">{hit.title}</span>
+                          {hit.snippet ? (
+                            <span className="truncate text-xs text-text-tertiary">
+                              {hit.snippet}
+                            </span>
+                          ) : null}
+                        </span>
+                      </CommandItem>
+                    );
+                  })}
                 </CommandGroup>
               ) : null}
             </CommandList>

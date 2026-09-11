@@ -126,6 +126,8 @@ pub struct DashboardView {
 pub struct SearchHit {
     pub note_id: String,
     pub title: String,
+    /// Çalışma alanı varsa Cmd+K sonucu doğru İş yüzeyinde açılabilir.
+    pub workspace: Option<String>,
     /// Eşleşen bağlam parçası. Madde 19.5: yalnız arayüze gider, log'a GİTMEZ.
     pub snippet: String,
 }
